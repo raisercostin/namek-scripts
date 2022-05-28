@@ -11,7 +11,7 @@ progname=$(basename $0)
 readonly progname
 verbose=1
 dryRun=${dryRun:-n}
-command="usageCommand"
+command="usage"
 #moved before set that will affect $@
 readonly allArgs=$@
 set -o errexit -o pipefail -o noclobber -o nounset
@@ -834,24 +834,32 @@ function array_joinArgs() {
 
 function array_join() {
   local delim="$1"
-  #echo eval echo "\${$2[@]}"
-  #local ids=${!\${$2[@]}}
-  #local ids=${!2[@]}
   eval local ids=\(\${$2[@]}\)
-  #str="${ids/#/$delim}" # Expand arguments with prefixed delimiter (Empty IFS)
-  #printf "${str:${#delim}}" # Echo without first delimiter
-  printf ${ids[0]}
-  if ((${#ids[@]} > 1)); then
-    printf "$delim%s" ${ids[@]:1}
+  if ((${#ids[@]} > 0)); then
+    printf ${ids[0]}
+    if ((${#ids[@]} > 1)); then
+      printf "$delim%s" ${ids[@]:1}
+    fi
   fi
-  #ids_d=${ids_d:${#delim}} # Echo without first delimiter
-  #printf $ids_d
-  #eval local ids=\(\${$2[@]}\)
-  ##echo ids=${ids[@]}
-  #IFS=$1 eval 'lst="${ids[*]}"'
-  #echo $lst
 }
 
+function array_mkstring() {
+  local delimStart="$1"
+  local delimMiddle="$2"
+  local delimEnd="$3"
+  eval local ids=\(\${$4[@]}\)
+  if ((${#ids[@]} > 0)); then
+    # shellcheck disable=SC2059
+    printf "$delimStart"
+    # shellcheck disable=SC2059
+    printf "${ids[0]}"
+    if ((${#ids[@]} > 1)); then
+      printf "$delimMiddle%s" "${ids[@]:1}"
+    fi
+    # shellcheck disable=SC2059
+    printf "$delimEnd"
+  fi
+}
 function array_print() {
   #printf "\n===%s" ${commands[@]}
   array_join "," "$1"
@@ -929,15 +937,7 @@ function readConfiguredVariables() {
 
 #simple escape - https://stackoverflow.com/questions/255898/how-to-iterate-over-arguments-in-a-bash-script
 function escape() {
-  echo $1
-}
-
-function printSamples() {
-  cat <<HEREDOC
-Samples:
-  SONAR_LOGIN_TOKEN=none gitUpdateDisabled=false dryRun=true ./build.sh sonarScan
--------
-HEREDOC
+  echo "$1"
 }
 
 function usageCommand2() {
@@ -987,24 +987,45 @@ HEREDOC
 }
 
 function usageCommand() {
+  # shellcheck disable=SC2207
+  declare -a detectedCommands=($(declare -F | grep -oE '([^ ]+)Command$' | sed 's/\(.*\)Command$/\1/'))
+
   declare -l ident=""
   declare -l delim="\n$ident - "
   cat <<HEREDOC1
-$ident Syntax: $progname <command|customCommand>
-$ident
-$ident <command> is:
-$ident - $(array_join "$delim" mainCommands)
-$ident <customCommand> is:
-$ident - $(array_join "$delim" customCommands)
-$ident <flags> are:
-$ident - $(array_join "$delim" mainProperties)
+
+Called: '$progname $allArgs'
+
+Syntax: $progname <command>
+
+<command>:
+  Detected - functions ending with \`Command\`$(array_mkstring "$delim" "$delim" "" detectedCommands)
+
+  Main:$(array_mkstring "$delim" "$delim" "" mainCommands)
+
+<flags>:
+ - $(array_mkstring "$delim" "$delim" "" mainProperties)
+
+Samples:
+  SONAR_LOGIN_TOKEN=none gitUpdateDisabled=false dryRun=true ./build.sh sonarScan
 
 HEREDOC1
+  #  Custom:$(array_mkstring "$delim" "$delim" "" customCommands)
 }
 
-function runMain() {
-  readonly commandHere=${1?$(usageCommand)}
-  call $command ${rest[@]}
+function commandExists() {
+  type "$1" &>/dev/null
+}
+
+function commandRun() {
+  local commandHere=${1?$(usageCommand)}
+  if commandExists "${commandHere}"; then
+    call "$command" "${rest[@]}"
+  elif commandExists "${commandHere}Command"; then
+    call "${command}Command" "${rest[@]}"
+  else
+    echo "Command $command not found"
+  fi
 }
 
 readConfiguredVariables
@@ -1040,13 +1061,13 @@ for arg in $allArgs; do
     ;;
   *)
     all+=("$(escape \"$arg\")")
-    commands+=("$(escape \"$arg\")")
+    commands+=("$arg")
     ;;
   esac
 done
 
 if ((${#commands[@]} > 0)); then
-  command=${commands[0]}
+  command="${commands[0]}"
   rest=("${commands[@]:1}" "${flags[@]}")
 fi
 
@@ -1112,4 +1133,4 @@ readonly mainProperties=(
   'dryRun:true|false'
   'gitUpdateDisabled:true|false'
 )
-if [ -z "${customCommands+xxx}" ]; then runMain $command; fi
+if [ -z "${bootstrapVersion+xxx}" ]; then commandRun "$command"; fi
