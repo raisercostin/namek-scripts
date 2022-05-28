@@ -6,7 +6,7 @@
 #args - https://stackoverflow.com/questions/192249/how-do-i-parse-command-line-arguments-in-bash
 # saner programming env: these switches turn some bugs into errors
 # initialize variables
-readonly progname=$(basename $0)
+progname=$(basename $0);readonly progname
 verbose=1
 dryRun=${dryRun:-n}
 command="usageCommand"
@@ -15,13 +15,13 @@ readonly allArgs=$@
 set -o errexit -o pipefail -o noclobber -o nounset
 #set -o nounset [[ "${DEBUG?:-}" == 'true' ]] && set -o xtrace
 
-readonly red=`tput setaf 1`
-readonly green=`tput setaf 2`
-readonly reset=`tput sgr0`
+red=$(tput setaf 1);readonly red
+green=$(tput setaf 2);readonly green
+reset=$(tput sgr0);readonly reset
 readonly identPrefix="   >"
 
 function tern(){
-  case $1 in ''|false|FALSE|null|NULL|0|'n') echo $3;;*) echo $2;;esac
+  case $1 in ''|false|FALSE|null|NULL|0|'n') echo "$3";;*) echo "$2";; esac
 }
 
 function execute() { echo "$ident${green}start>${reset} ${*/eval/}" ; "$@" ; }
@@ -29,7 +29,7 @@ function execute() { echo "$ident${green}start>${reset} ${*/eval/}" ; "$@" ; }
 # $execute is initialized from dryRun
 returnValue=""
 function logAndExecute() {
-  echo "$ident `tern $execute "${green}start>${reset}" "${red}startDry>${reset}"` ${*/eval/}" ; if [[ $execute == "y" ]]; then returnValue=`"$@"`; else returnValue=""; fi;
+  echo "$ident $(tern "$execute" "${green}start>${reset}" "${red}startDry>${reset}") ${*/eval/}" ; if [[ $execute == "y" ]]; then returnValue=$("$@"); else returnValue=""; fi;
 }
 
 function title() {
@@ -662,8 +662,8 @@ function postgresBackup(){
   readonly PG_FORMAT=${PG_FORMAT:-plain}
   readonly PG_ENCODING=${PG_ENCODING:-UTF-8}
   readonly PG_COMPRESSION_LEVEL=${PG_COMPRESSION_LEVEL:-9}
-  readonly PG_VERBOSE=`tern $verbose "--verbose" ""`
-  readonly PG_OUTPUT_FILE="$PG_OUTPUT_FILE_PATH/$RELEASE$PG_SCHEMA-postgres-export-`date '+%Y-%m-%d_%H-%M-%S'`"
+  readonly PG_VERBOSE=$(tern $verbose "--verbose" "")
+  readonly PG_OUTPUT_FILE="$PG_OUTPUT_FILE_PATH/$RELEASE$PG_SCHEMA-postgres-export-$(date '+%Y-%m-%d_%H-%M-%S')"
   readonly PG_INSTALL_PACKAGE="postgresql-client"
 
   if (( $verbose > 0 )); then
