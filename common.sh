@@ -6,7 +6,8 @@
 #args - https://stackoverflow.com/questions/192249/how-do-i-parse-command-line-arguments-in-bash
 # saner programming env: these switches turn some bugs into errors
 # initialize variables
-progname=$(basename $0);readonly progname
+progname=$(basename $0)
+readonly progname
 verbose=1
 dryRun=${dryRun:-n}
 command="usageCommand"
@@ -15,25 +16,32 @@ readonly allArgs=$@
 set -o errexit -o pipefail -o noclobber -o nounset
 #set -o nounset [[ "${DEBUG?:-}" == 'true' ]] && set -o xtrace
 
-red=$(tput setaf 1);readonly red
-green=$(tput setaf 2);readonly green
-reset=$(tput sgr0);readonly reset
+red=$(tput setaf 1)
+readonly red
+green=$(tput setaf 2)
+readonly green
+reset=$(tput sgr0)
+readonly reset
 readonly identPrefix="   >"
 
-function tern(){
-  case $1 in ''|false|FALSE|null|NULL|0|'n') echo "$3";;*) echo "$2";; esac
+function tern() {
+  case $1 in '' | false | FALSE | null | NULL | 0 | 'n') echo "$3" ;; *) echo "$2" ;; esac
 }
 
-function execute() { echo "$ident${green}start>${reset} ${*/eval/}" ; "$@" ; }
+function execute() {
+  echo "$ident${green}start>${reset} ${*/eval/}"
+  "$@"
+}
 
 # $execute is initialized from dryRun
 returnValue=""
 function logAndExecute() {
-  echo "$ident $(tern "$execute" "${green}start>${reset}" "${red}startDry>${reset}") ${*/eval/}" ; if [[ $execute == "y" ]]; then returnValue=$("$@"); else returnValue=""; fi;
+  echo "$ident $(tern "$execute" "${green}start>${reset}" "${red}startDry>${reset}") ${*/eval/}"
+  if [[ $execute == "y" ]]; then returnValue=$("$@"); else returnValue=""; fi
 }
 
 function title() {
-    cat <<-HEREDOC
+  cat <<-HEREDOC
 $ident ------------------------------
 $ident ----- ${1:-Title}
 HEREDOC
@@ -43,7 +51,7 @@ function idented() { printf "$1"'%.s' $(eval "echo {1.."$(($2))"}"); }
 
 #The `$ident` variable can be used to ident any echo/print under the current function that was called with `call`
 declare ident=""
-function call(){
+function call() {
   ident="$ident$identPrefix"
   echo "$ident start $@"
   $@
@@ -52,19 +60,17 @@ function call(){
 }
 
 function finalCleanup {
-  if [[ ! "${LEGACY_GOCD:-}" == "yes" ]] && [[ `find . -name .gitsecret` ]]; then
-      for d in `find . -name .gitsecret`
-      do
-        RP=`realpath $d`
-        PDIR=`dirname $RP`
-        echo "========= Performing cleanup in $PDIR ============="
-        for pd in $PDIR
-        do
-          cd $pd
-          for item in `git secret list`; do [[ -f $item ]] && rm $item || echo "Will not remove: $item - file does not exist"; done
-          cd -
-        done
+  if [[ ! "${LEGACY_GOCD:-}" == "yes" ]] && [[ $(find . -name .gitsecret) ]]; then
+    for d in $(find . -name .gitsecret); do
+      RP=$(realpath $d)
+      PDIR=$(dirname $RP)
+      echo "========= Performing cleanup in $PDIR ============="
+      for pd in $PDIR; do
+        cd $pd
+        for item in $(git secret list); do [[ -f $item ]] && rm $item || echo "Will not remove: $item - file does not exist"; done
+        cd -
       done
+    done
   fi
 }
 #trap finalCleanup EXIT
@@ -73,12 +79,12 @@ CURRENT_COMMAND="unknown command"
 # keep track of the last executed command
 trap '{ set +x; } 2>/dev/null; LAST_COMMAND=$CURRENT_COMMAND; CURRENT_COMMAND=$BASH_COMMAND' DEBUG
 exitFunc() {
-    RET=$?
-    if [[ $RET -ne 0 ]]; then
-        { set +x; } 2>/dev/null
-        echo "$ident[FATAL] Command <${CURRENT_COMMAND}> failed with exit code $RET."
-    fi
-    finalCleanup
+  RET=$?
+  if [[ $RET -ne 0 ]]; then
+    { set +x; } 2>/dev/null
+    echo "$ident[FATAL] Command <${CURRENT_COMMAND}> failed with exit code $RET."
+  fi
+  finalCleanup
 }
 # echo an error message before exiting
 trap 'exitFunc' EXIT
@@ -91,7 +97,7 @@ function die() {
 }
 
 function comment() {
-  while read line; do echo "# $line"; done;
+  while read line; do echo "# $line"; done
 }
 
 function retry_on_failure_or_timeout() {
@@ -105,8 +111,7 @@ function retry_on_failure_or_timeout() {
   CODE=$?
 
   # if it's timeout, try for $RETRIES times
-  while (( $n < $RETRIES )) && [ $CODE = 124 ]
-  do
+  while (($n < $RETRIES)) && [ $CODE = 124 ]; do
     echo "Command '$*' timed out. Attempt $n/$RETRIES.."
     ((n++))
     timeout -k $TIMEOUT $((TIMEOUT - 5)) $*
@@ -115,36 +120,32 @@ function retry_on_failure_or_timeout() {
 
   # after the retries the command works => return 0
   # if the code is not 0 or 124(timeout) => retry to run command
-  if (( $CODE == 124 ))
-  then 
+  if (($CODE == 124)); then
     echo "Command '$*' has timed out after $n attempts."
     return 124
-  elif (( $CODE == 0 ))
-  then
+  elif (($CODE == 0)); then
     echo "Command $@ executed successfully"
     return 0
   else
-    while true
-    do
+    while true; do
       eval "$*" && break || {
-      if (( $n < $RETRIES ))
-      then
-        echo "Command '$@' failed. Attempt $n/$RETRIES.."
-        ((n++))
-      else
-        echo "Command has failed after $n attempts."
-        return 1
-      fi
+        if (($n < $RETRIES)); then
+          echo "Command '$@' failed. Attempt $n/$RETRIES.."
+          ((n++))
+        else
+          echo "Command has failed after $n attempts."
+          return 1
+        fi
       }
     done
   fi
 }
 
-function gitCleanup(){
+function gitCleanup() {
   local -r _GIT_CLEAN_PARAMS=${GIT_CLEAN_PARAMS_OVERRIDE:-${_GIT_CLEAN_PARAMS:-"-ff -x -d .ssh target"}}
   local -r _GIT_CLEAN_ADDITIONAL_PARAMS=${GIT_CLEAN_ADDITIONAL_PARAMS_OVERRIDE:-${_GIT_CLEAN_ADDITIONAL_PARAMS:-""}}
 
-  if (( $verbose > 0 )); then
+  if (($verbose > 0)); then
     # print out all the parameters we read in
     cat <<-HEREDOC
     verbose=$verbose
@@ -165,11 +166,11 @@ HEREDOC
 }
 
 #like gitUpdate but without repo
-function gitUpdate2(){
+function gitUpdate2() {
   gitUpdate $@ "none"
 }
 
-function gitUpdate(){
+function gitUpdate() {
   local -r MY_SCRIPTS_DIR=${1?Missing dir}
   local -r MY_SCRIPTS_GIT=${2?Missing git repository}
   if [[ "${gitUpdateDisabled:-}" != "true" ]]; then
@@ -184,23 +185,23 @@ function gitUpdate(){
         fi
         git pull --ff-only --rebase --autostash
       ) || (
-        echo "$ident${red}Could not pull in $MY_SCRIPTS_DIR ${reset}" \
-            && ls -al "$MY_SCRIPTS_DIR"
+        echo "$ident${red}Could not pull in $MY_SCRIPTS_DIR ${reset}" &&
+          ls -al "$MY_SCRIPTS_DIR"
       )
     else
-      mkdir -p $MY_SCRIPTS_DIR/.. \
-        || echo "$ident${red}Cannot mkdir $MY_SCRIPTS_DIR${reset}"
+      mkdir -p $MY_SCRIPTS_DIR/.. ||
+        echo "$ident${red}Cannot mkdir $MY_SCRIPTS_DIR${reset}"
       (
-        cd $MY_SCRIPTS_DIR/.. && \
-          git clone "$MY_SCRIPTS_GIT" `basename $MY_SCRIPTS_DIR` \
-            || echo "$ident${red}Could not clone${reset}"
+        cd $MY_SCRIPTS_DIR/.. &&
+          git clone "$MY_SCRIPTS_GIT" $(basename $MY_SCRIPTS_DIR) ||
+          echo "$ident${red}Could not clone${reset}"
       )
     fi
     if [[ ! "${LEGACY_GOCD}" == "yes" ]] && [[ -d $MY_SCRIPTS_DIR/.gitsecret ]]; then
       cd $MY_SCRIPTS_DIR
       # Let it fail if latest version of encrypted files couldn't be decrypted
       git secret reveal -f
-      for f in `git secret list`; do [[ -f $f ]] && chmod 600 $f || echo "${ident}Error. Does the file $f exist?"; done
+      for f in $(git secret list); do [[ -f $f ]] && chmod 600 $f || echo "${ident}Error. Does the file $f exist?"; done
     fi
     echo "$ident${green}done${reset}"
   else
@@ -209,7 +210,7 @@ function gitUpdate(){
 }
 
 function create_custom_tag() {
-  
+
   # receive names of full and custom tag
   readonly DOCKER_IMAGE_TAG_CUSTOM=${DOCKER_IMAGE_TAG_CUSTOM?Missing custom tag}
   readonly DOCKER_IMAGE_TAG_FULL=${DOCKER_IMAGE_TAG_FULL?Missing full tag}
@@ -232,7 +233,7 @@ function create_custom_tag() {
 
 }
 
-function configBuild(){
+function configBuild() {
   readonly GIT_ACCESS_TOKEN=${GIT_ACCESS_TOKEN?Missing git access token used by scripts.}
   readonly DOCKER_REGISTRY=${DOCKER_REGISTRY?Missing the docker registry. See selected part [registry.gitlab.com]/namek/backend}
   readonly DOCKER_REGISTRY_CHECK=${DOCKER_REGISTRY_CHECK_OVERRIDE:-${DOCKER_REGISTRY_CHECK:-Missing the docker registry. For example https://gitlab.com/namek/backend/container_registry or ${DOCKER_REGISTRY}/v2/_catalog}}
@@ -246,10 +247,8 @@ function configBuild(){
   # echo "Using DOCKER_IMAGE_TAG_CUSTOM=$DOCKER_IMAGE_TAG_CUSTOM as custom image tag. You can override it if you need."
   echo "${green}done${reset}"
 
-
   readonly DOCKER_IMAGE_TAG_LATEST=${DOCKER_IMAGE_TAG_LATEST:-latest}
   readonly JAR_FILE=${JAR_FILE_OVERRIDE:-${JAR_FILE:-}}
-
 
   # PREPARE PROPERTIES
   # use some utilities to extract pom.xml version and timestamps
@@ -259,12 +258,12 @@ function configBuild(){
 
   readonly BRANCH=${BRANCH_OVERRIDE:-${BRANCH:-master}}
   git checkout $BRANCH
-  
+
   echo "Creating TAG using project version, git version and git timestamp"
   #readonly DOCKER_IMAGE_TAG_FULL=`target/utility-scripts/bin/version.sh $PWD`
-  readonly DOCKER_IMAGE_TAG_FULL=`projectVersion $PWD`
+  readonly DOCKER_IMAGE_TAG_FULL=$(projectVersion "$PWD")
   rm -rf image-tag.txt
-  echo $DOCKER_IMAGE_TAG_FULL > image-tag.txt
+  echo $DOCKER_IMAGE_TAG_FULL >image-tag.txt
   echo DOCKER_IMAGE_TAG_FULL=$DOCKER_IMAGE_TAG_FULL
   echo ${green}done${reset}
   readonly DOCKER_LOCAL_FAKE_REGISTRY=fake-inexistent-registry.namek-base.com
@@ -276,7 +275,7 @@ function configBuild(){
 
   # END PREPARE PROPERTIES
 
-  if (( $verbose > 0 )); then
+  if (($verbose > 0)); then
     # print out all the parameters we read in
     cat <<-HEREDOC
     verbose=$verbose
@@ -287,7 +286,7 @@ function configBuild(){
     DOCKER_REGISTRY_CHECK=${DOCKER_REGISTRY_CHECK}
     DOCKER_REPOSITORY=${DOCKER_REPOSITORY}
     DOCKER_REGISTRY_USERNAME=${DOCKER_REGISTRY_USERNAME}
-    DOCKER_REGISTRY_PASSWORD=<`tern "$DOCKER_REGISTRY_PASSWORD" "secret is configured" "secret is NOT defined"`>
+    DOCKER_REGISTRY_PASSWORD=<$(tern "$DOCKER_REGISTRY_PASSWORD" "secret is configured" "secret is NOT defined")>
     DOCKER_IMAGE_NAME=${DOCKER_IMAGE_NAME}
     DOCKER_IMAGE_TAG_FULL=${DOCKER_IMAGE_TAG_FULL}
     DOCKER_IMAGE_TAG_LATEST=${DOCKER_IMAGE_TAG_LATEST}
@@ -297,7 +296,7 @@ function configBuild(){
     DOCKER_IMAGE=$DOCKER_IMAGE
 
     --- git
-    GIT_ACCESS_TOKEN=<`tern "$GIT_ACCESS_TOKEN" "secret is configured" "secret is NOT defined"`>
+    GIT_ACCESS_TOKEN=<$(tern "$GIT_ACCESS_TOKEN" "secret is configured" "secret is NOT defined")>
     --- others
     SCRIPTS_GIT=$SCRIPTS_GIT
     JAR_FILE=$JAR_FILE
@@ -314,7 +313,7 @@ HEREDOC
   fi
 }
 
-function _goss_tests(){
+function _goss_tests() {
   readonly CMD=${CMD_OVERRIDE:-${CMD:-""}}
 
   if [[ -f goss.yaml ]]; then
@@ -332,7 +331,7 @@ function _goss_tests(){
   fi
 }
 
-function configDeploy(){ 
+function configDeploy() {
   readonly GIT_ACCESS_TOKEN=${GIT_ACCESS_TOKEN?Missing git access token used by scripts. If using GOCD you can define it as a secret in the gocd environment named [${GO_ENVIRONMENT_NAME:-<no environment>}]}
   readonly K8S_DOCKER_REGISTRY=${K8S_DOCKER_REGISTRY?Missing the docker registry. See selected part [registry.gitlab.com]/namek/namek-backend}
   readonly K8S_DOCKER_REGISTRY_CHECK=${K8S_DOCKER_REGISTRY_CHECK:-Missing the docker registry. For example https://gitlab.com/namek/namek-backend/container_registry or ${K8S_DOCKER_REGISTRY}/v2/_catalog}
@@ -342,7 +341,7 @@ function configDeploy(){
   readonly DOCKER_IMAGE_NAME=${DOCKER_IMAGE_NAME_OVERRIDE:-${DOCKER_IMAGE_NAME?Missing the docker registry. See selected part registry.gitlab.com/namek/[namek-backend]}}
 
   # PREPARE PROPERTIES
-  readonly DOCKER_TAG=${DOCKER_TAG_OVERRIDE:-${DOCKER_TAG:-`cat image-tag.txt`}}
+  readonly DOCKER_TAG=${DOCKER_TAG_OVERRIDE:-${DOCKER_TAG:-$(cat image-tag.txt)}}
   readonly DOCKER_IMAGE=${DOCKER_IMAGE_NAME}:${DOCKER_TAG}
   readonly DOCKER_IMAGE_MANIFEST=http://$K8S_DOCKER_REGISTRY/v2$DOCKER_REPOSITORY/$DOCKER_IMAGE_NAME/manifests/${DOCKER_TAG}
   readonly K8S_DEPLOYMENT_PROFILE_BASE=${K8S_DEPLOYMENT_PROFILE_BASE_OVERRIDE:-${K8S_DEPLOYMENT_PROFILE_BASE?Missing kubernetes deployment profile. Should be one under https://$GIT_ACCESS_TOKEN@gitlab.com/namek-base/all/kubernetes/kubernetes-autodeploy-profiles/}}
@@ -359,7 +358,7 @@ function configDeploy(){
 
   # END PREPARE PROPERTIES
 
-  if (( $verbose > 0 )); then
+  if (($verbose > 0)); then
     # print out all the parameters we read in
     cat <<-HEREDOC
     verbose=$verbose
@@ -369,7 +368,7 @@ function configDeploy(){
     K8S_DOCKER_REGISTRY_CHECK=$K8S_DOCKER_REGISTRY_CHECK
     DOCKER_REPOSITORY=$DOCKER_REPOSITORY
     K8S_DOCKER_REGISTRY_USERNAME=$K8S_DOCKER_REGISTRY_USERNAME
-    K8S_DOCKER_REGISTRY_PASSWORD=<`tern "$K8S_DOCKER_REGISTRY_PASSWORD" "secret is configured" "secret is NOT defined"`>
+    K8S_DOCKER_REGISTRY_PASSWORD=<$(tern "$K8S_DOCKER_REGISTRY_PASSWORD" "secret is configured" "secret is NOT defined")>
     DOCKER_IMAGE_NAME=$DOCKER_IMAGE_NAME
     DOCKER_TAG=$DOCKER_TAG
 
@@ -378,7 +377,7 @@ function configDeploy(){
     DOCKER_IMAGE_MANIFEST=${DOCKER_IMAGE_MANIFEST}
 
     --- git
-    GIT_ACCESS_TOKEN=<`tern "$GIT_ACCESS_TOKEN" "secret is configured" "secret is NOT defined"`>
+    GIT_ACCESS_TOKEN=<$(tern "$GIT_ACCESS_TOKEN" "secret is configured" "secret is NOT defined")>
     --- ansible profile at
     K8S_PROFILES_PATH=$K8S_PROFILES_PATH
     K8S_DEPLOYMENT_PROFILE_BASE=$K8S_DEPLOYMENT_PROFILE_BASE
@@ -394,22 +393,22 @@ function configDeploy(){
 HEREDOC
   fi
 
-  function prepareProfilesAndUtilities(){
+  function prepareProfilesAndUtilities() {
     (
-      local -r SCRIPTS_DIR=`realpath -m $K8S_PROFILES_PATH/../`
+      local -r SCRIPTS_DIR=$(realpath -m $K8S_PROFILES_PATH/../)
       local -r SCRIPTS_GIT=$K8S_SCRIPTS_GIT
       gitUpdate $SCRIPTS_DIR $SCRIPTS_GIT
     )
 
     (
-      local -r SCRIPTS_DIR=`realpath -m $K8S_PROFILES_PATH/$K8S_DEPLOYMENT_PROFILE_BASE.profile`
+      local -r SCRIPTS_DIR=$(realpath -m $K8S_PROFILES_PATH/$K8S_DEPLOYMENT_PROFILE_BASE.profile)
       local -r SCRIPTS_GIT=$K8S_DEPLOYMENT_PROFILE_GIT
       gitUpdate $SCRIPTS_DIR $SCRIPTS_GIT
     )
   }
 }
 
-function projectVersion(){
+function projectVersion() {
   #copied and slightly changed from https://gitlab.com/namek-base/all/utility-scripts/-/blob/master/bin/version.sh
   (
     #cd $(readlink -f ${0%/*})
@@ -424,16 +423,16 @@ function projectVersion(){
       exit 1
     fi
 
-    pushd $WORKING_DIR > /dev/null
-    GIT_TAG="`git log --oneline | wc -l`-`git rev-parse --short HEAD`-`git log -1 --date=format:%Y_%m_%d-%H_%M_%S --pretty=format:%cd`"
-    popd > /dev/null
+    pushd $WORKING_DIR >/dev/null
+    GIT_TAG="$(git log --oneline | wc -l)-$(git rev-parse --short HEAD)-$(git log -1 --date=format:%Y_%m_%d-%H_%M_%S --pretty=format:%cd)"
+    popd >/dev/null
 
     ## Project detection
     # Maven project?
     PROJECT_FILE="$WORKING_DIR/pom.xml"
     if [[ -f "$PROJECT_FILE" ]]; then
-      #if python 2.5 
-      OUTPUT_VERSION=`python3 -c "import xml.etree.ElementTree as ET; print(ET.parse(open('pom.xml')).getroot().find( '{http://maven.apache.org/POM/4.0.0}version').text)"`
+      #if python 2.5
+      OUTPUT_VERSION=$(python3 -c "import xml.etree.ElementTree as ET; print(ET.parse(open('pom.xml')).getroot().find( '{http://maven.apache.org/POM/4.0.0}version').text)")
       #sudo apt-get install libxml2-utils --yes
       #. ../lib/xml.sh
       #OUTPUT_VERSION=`xmlpath \"$PROJECT_FILE\" '/project/version'`
@@ -446,7 +445,7 @@ function projectVersion(){
       PROJECT_FILE="$WORKING_DIR/package.json"
       if [[ -f "$PROJECT_FILE" ]]; then
         #https://stackoverflow.com/questions/1955505/parsing-json-with-unix-tools
-        OUTPUT_VERSION=`cat $PROJECT_FILE | python3 -c "import sys, json; print(json.load(sys.stdin)['version'])"`
+        OUTPUT_VERSION=$(cat $PROJECT_FILE | python3 -c "import sys, json; print(json.load(sys.stdin)['version'])")
         #OUTPUT_VERSION=`jq -r '.version' \"$PROJECT_FILE\"`
         if [[ $? -ne 0 ]]; then
           echo "[ERROR] Command failed" >&2
@@ -458,15 +457,14 @@ function projectVersion(){
   )
 }
 
-function dockerDeploy(){
+function dockerDeploy() {
   configDeploy
   local -r _K8S_DEPLOYMENT_PROFILE_PATH=$K8S_PROFILES_PATH/$K8S_DEPLOYMENT_PROFILE_BASE.profile
 
   if [[ $execute == "y" ]]; then
     prepareProfilesAndUtilities
     set -x
-    for i in ${!K8S_APP_DEPLOY_SCRIPT[@]}
-    do
+    for i in ${!K8S_APP_DEPLOY_SCRIPT[@]}; do
       profile="${K8S_APP_DEPLOY_SCRIPT[i]}"
       $_K8S_DEPLOYMENT_PROFILE_PATH/bin/$profile -- -e custom_deployment_tag=$DOCKER_TAG -e registry=$K8S_DOCKER_REGISTRY$DOCKER_REPOSITORY
     done
@@ -485,9 +483,9 @@ function dockerDeploy(){
 HEREDOC
 }
 
-function dockerBuildTagPush(){
+function dockerBuildTagPush() {
   local -r executeMaven=${1:-}
-  _base_dir=`readlink -f ${BASH_SOURCE[0]} | grep -o '.*/'`
+  _base_dir=$(readlink -f ${BASH_SOURCE[0]} | grep -o '.*/')
   configBuild
   if [[ $execute == "y" ]]; then
     if [[ $executeMaven == "executeMaven" ]]; then
@@ -537,12 +535,12 @@ function dockerBuildTagPush(){
 HEREDOC
 }
 
-function mvnTest(){
+function mvnTest() {
   local -r target=${target:-test}
 
   ## Variables
   LEGACY_GOCD=${LEGACY_GOCD:-no}
-  [[ "${LEGACY_GOCD}" == "yes" ]] && export HOST_WORKDIR=/home/shared/gocd/`hostname | awk -F'[-.]' '{print $2"-"$3}'`
+  [[ "${LEGACY_GOCD}" == "yes" ]] && export HOST_WORKDIR=/home/shared/gocd/$(hostname | awk -F'[-.]' '{print $2"-"$3}')
   HOST_WORKDIR=${HOST_WORKDIR:-/mnt/revo-gocd-agent-workdir}
   TEST_CONTAINER_WORKDIR=${TEST_CONTAINER_WORKDIR:-/work}
   PROJECT_DIR_NAME=${PROJECT_DIR_NAME:-"${PWD##*/}"}
@@ -563,15 +561,15 @@ function mvnTest(){
 -Dgroups=\"${MAVEN_SUREFIRE_TAGS}\" \
 -DargLine=\"@{argLine} -Xmx${MAVEN_SUREFIRE_XMX}m\" "
 }
-function mvnTestNoFail(){
+function mvnTestNoFail() {
   SHOULD_FAIL="--fail-never -Dmaven.test.failure.ignore=true"
   target="test jacoco:report"
   call mvnTest
 }
-function mvnCompile(){
+function mvnCompile() {
   ## Variables
   LEGACY_GOCD=${LEGACY_GOCD:-no}
-  [[ "${LEGACY_GOCD}" == "yes" ]] && export HOST_WORKDIR=/home/shared/gocd/`hostname | awk -F'[-.]' '{print $2"-"$3}'`
+  [[ "${LEGACY_GOCD}" == "yes" ]] && export HOST_WORKDIR=/home/shared/gocd/$(hostname | awk -F'[-.]' '{print $2"-"$3}')
   HOST_WORKDIR=${HOST_WORKDIR:-/mnt/revo-gocd-agent-workdir}
   TEST_CONTAINER_WORKDIR=${TEST_CONTAINER_WORKDIR:-/work}
   PROJECT_DIR_NAME=${PROJECT_DIR_NAME:-"${PWD##*/}"}
@@ -584,18 +582,18 @@ function mvnCompile(){
     -v $HOST_WORKDIR:$TEST_CONTAINER_WORKDIR \
     $TEST_CONTAINER_IMAGE \
     bash -c \
-      "cd $TEST_CONTAINER_PROJECT_DIR
+    "cd $TEST_CONTAINER_PROJECT_DIR
       mvn -Duser.home=$TEST_CONTAINER_WORKDIR compile -DskipTests=true"
 }
 
-function sonarScan(){
+function sonarScan() {
   # Maven project?
   [[ -f "$PWD/pom.xml" ]] && call mvnTestNoFail
   # [[ -f "$PWD/pom.xml" ]] && mvnCompile
 
   ## Variables
   LEGACY_GOCD=${LEGACY_GOCD:-no}
-  [[ "${LEGACY_GOCD}" == "yes" ]] && export HOST_WORKDIR="/home/shared/gocd/`hostname | awk -F'[-.]' '{print $2"-"$3}'`"
+  [[ "${LEGACY_GOCD}" == "yes" ]] && export HOST_WORKDIR="/home/shared/gocd/$(hostname | awk -F'[-.]' '{print $2"-"$3}')"
   HOST_WORKDIR=${HOST_WORKDIR:-/mnt/revo-gocd-agent-workdir}
   PROJECT_DIR_NAME=${PROJECT_DIR_NAME:-"${PWD##*/}"}
   HOST_PROJECT_DIR_PATH=${HOST_PROJECT_DIR_PATH:-$HOST_WORKDIR/pipelines/$PROJECT_DIR_NAME}
@@ -604,34 +602,34 @@ function sonarScan(){
   #logAndExecute docker build -t mybuild/sonar-scanner-cli --file SonarDockerfile .
   #mybuild/sonar-scanner-cli:latest
   logAndExecute docker run \
-      -u 1000 --rm \
-      -e SONAR_LOGIN="$SONAR_LOGIN_TOKEN" \
-      -v "$HOST_PROJECT_DIR_PATH:/usr/src" \
-        sonarsource/sonar-scanner-cli:4.7.0 \
-        -Dproject.settings=.sonar.properties
+    -u 1000 --rm \
+    -e SONAR_LOGIN="$SONAR_LOGIN_TOKEN" \
+    -v "$HOST_PROJECT_DIR_PATH:/usr/src" \
+    sonarsource/sonar-scanner-cli:4.7.0 \
+    -Dproject.settings=.sonar.properties
 }
 
-function k8sScale(){
+function k8sScale() {
   REPLICAS=${REPLICAS?Please provide the number of replicas you want to scale to}
   NS=${NS:-default}
   APP_NAME=${APP_NAME:-""}
   LABEL_KEY=${LABEL_KEY:-app}
   LABEL_VALUE=${LABEL_VALUE:-$APP_NAME}
 
-  POD_NAME=`kubectl -n $NS get pods -l $LABEL_KEY=$LABEL_VALUE -o name | tail -n1`
+  POD_NAME=$(kubectl -n $NS get pods -l $LABEL_KEY=$LABEL_VALUE -o name | tail -n1)
 
-  OWNER_NAME_LVL1=`kubectl -n $NS get $POD_NAME -o jsonpath="{.metadata.ownerReferences[].name}"`
-  OWNER_KIND_LVL1=`kubectl -n $NS get $POD_NAME -o jsonpath="{.metadata.ownerReferences[].kind}"`
+  OWNER_NAME_LVL1=$(kubectl -n $NS get $POD_NAME -o jsonpath="{.metadata.ownerReferences[].name}")
+  OWNER_KIND_LVL1=$(kubectl -n $NS get $POD_NAME -o jsonpath="{.metadata.ownerReferences[].kind}")
 
   if [[ "${OWNER_KIND_LVL1}" == "ReplicaSet" ]]; then
-    OWNER_NAME_LVL2=`kubectl -n $NS get $OWNER_KIND_LVL1/$OWNER_NAME_LVL1 -o jsonpath="{.metadata.ownerReferences[].name}"`
-    OWNER_KIND_LVL2=`kubectl -n $NS get $OWNER_KIND_LVL1/$OWNER_NAME_LVL1 -o jsonpath="{.metadata.ownerReferences[].kind}"`
+    OWNER_NAME_LVL2=$(kubectl -n $NS get $OWNER_KIND_LVL1/$OWNER_NAME_LVL1 -o jsonpath="{.metadata.ownerReferences[].name}")
+    OWNER_KIND_LVL2=$(kubectl -n $NS get $OWNER_KIND_LVL1/$OWNER_NAME_LVL1 -o jsonpath="{.metadata.ownerReferences[].kind}")
     kubectl -n $NS scale $OWNER_KIND_LVL2/$OWNER_NAME_LVL2 --replicas=$REPLICAS
   else
     kubectl -n $NS scale $OWNER_KIND_LVL1/$OWNER_NAME_LVL1 --replicas=$REPLICAS
   fi
 
-  if (( $verbose > 0 )); then
+  if (($verbose > 0)); then
     # print out all the parameters we read in
     cat <<-HEREDOC
     verbose=$verbose
@@ -651,7 +649,7 @@ HEREDOC
   fi
 }
 
-function postgresBackup(){
+function postgresBackup() {
   readonly RELEASE=${RELEASE_OVERRIDE:-${RELEASE?Missing release tag for backup}}
   readonly PG_DUMP_BINARY=${PG_DUMP_BINARY:-pg_dump}
   readonly PG_HOST=${PG_HOST_OVERRIDE:-${PG_HOST:-localhost}}
@@ -666,7 +664,7 @@ function postgresBackup(){
   readonly PG_OUTPUT_FILE="$PG_OUTPUT_FILE_PATH/$RELEASE$PG_SCHEMA-postgres-export-$(date '+%Y-%m-%d_%H-%M-%S')"
   readonly PG_INSTALL_PACKAGE="postgresql-client"
 
-  if (( $verbose > 0 )); then
+  if (($verbose > 0)); then
     # print out all the parameters we read in
     cat <<-HEREDOC
     verbose=$verbose
@@ -678,7 +676,7 @@ function postgresBackup(){
     PG_DB_NAME=${PG_DB_NAME}
     PG_SCHEMA=${PG_SCHEMA}
     PG_USERNAME=${PG_USERNAME}
-    PGPASSWORD=`tern "$PGPASSWORD" "PGPASSWORD is configured" "PGPASSWORD was NOT provided"`
+    PGPASSWORD=$(tern "$PGPASSWORD" "PGPASSWORD is configured" "PGPASSWORD was NOT provided")
     PG_FORMAT=${PG_FORMAT}
     PG_ENCODING=${PG_ENCODING}
     PG_VERBOSE=$PG_VERBOSE
@@ -688,11 +686,11 @@ HEREDOC
 
   $PG_DUMP_BINARY -V || echo "$PG_INSTALL_PACKAGE is not installed. Pleased install it and try again"
 
-  PGPASSWORD=$PGPASSWORD $PG_DUMP_BINARY --host=$PG_HOST --port=$PG_PORT --dbname=$PG_DB_NAME --format=$PG_FORMAT --encoding=$PG_ENCODING $PG_VERBOSE --compress=$PG_COMPRESSION_LEVEL --schema=$PG_SCHEMA --username=$PG_USERNAME > "$PG_OUTPUT_FILE" \
-      && zip -r -9 $PG_OUTPUT_FILE.zip $PG_OUTPUT_FILE && rm $PG_OUTPUT_FILE
+  PGPASSWORD=$PGPASSWORD $PG_DUMP_BINARY --host=$PG_HOST --port=$PG_PORT --dbname=$PG_DB_NAME --format=$PG_FORMAT --encoding=$PG_ENCODING $PG_VERBOSE --compress=$PG_COMPRESSION_LEVEL --schema=$PG_SCHEMA --username=$PG_USERNAME >"$PG_OUTPUT_FILE" &&
+    zip -r -9 $PG_OUTPUT_FILE.zip $PG_OUTPUT_FILE && rm $PG_OUTPUT_FILE
 }
 
-function postgresRestore(){
+function postgresRestore() {
   readonly PG_HOST=${PG_HOST_OVERRIDE:-${PG_HOST:-localhost}}
   readonly PG_PORT=${PG_PORT_OVERRIDE:-${PG_PORT:-5432}}
   readonly PG_DB_NAME=${PG_DB_NAME_OVERRIDE:-${PG_DB_NAME:-postgres}}
@@ -701,7 +699,7 @@ function postgresRestore(){
   readonly PG_IMPORT_FILE=${PG_IMPORT_FILE?Please provide the file to import from}
   readonly PG_INSTALL_PACKAGE="postgresql-client"
 
-  if (( $verbose > 0 )); then
+  if (($verbose > 0)); then
     # print out all the parameters we read in
     cat <<-HEREDOC
     verbose=$verbose
@@ -710,7 +708,7 @@ function postgresRestore(){
     PG_PORT=${PG_PORT}
     PG_DB_NAME=${PG_DB_NAME}
     PG_USERNAME=${PG_USERNAME}
-    PGPASSWORD=`tern "$PGPASSWORD" "PGPASSWORD is configured" "PGPASSWORD was NOT provided"`
+    PGPASSWORD=$(tern "$PGPASSWORD" "PGPASSWORD is configured" "PGPASSWORD was NOT provided")
     PG_ECHO_ERRORS=${PG_ECHO_ERRORS}
     PG_IMPORT_FILE=$PG_IMPORT_FILE
 HEREDOC
@@ -721,13 +719,13 @@ HEREDOC
   PGPASSWORD=$PGPASSWORD psql --host=$PG_HOST --port=$PG_PORT --dbname=$PG_DB_NAME --username=$PG_USERNAME $PG_ECHO_ERRORS --file=$PG_IMPORT_FILE
 }
 
-function applyConfig(){
+function applyConfig() {
   local -r K8S_PROFILES_PATH=${K8S_PROFILES_PATH_OVERRIDE:-${K8S_PROFILES_PATH:-/shared-projects/kubernetes-autodeploy/profiles}}
   local -r K8S_DEPLOYMENT_PROFILE_BASE=${K8S_DEPLOYMENT_PROFILE_BASE_OVERRIDE:-${K8S_DEPLOYMENT_PROFILE_BASE?Missing kubernetes deployment profile. Should be one under https://gitlab.com/namek-base/all/kubernetes/kubernetes-autodeploy-profiles/}}
   local -r SCRIPTS_DIR=${K8S_PROFILES_PATH}/${K8S_DEPLOYMENT_PROFILE_BASE}.profile/bin
   #local -r APPLY_CONFIG_SCRIPT_ABS_PATH=${SCRIPTS_DIR}/${APPLY_CONFIG_SCRIPT}
 
-  if (( $verbose > 0 )); then
+  if (($verbose > 0)); then
     # print out all the parameters we read in
     cat <<-HEREDOC
     verbose=$verbose
@@ -739,7 +737,7 @@ HEREDOC
   fi
 
   gitUpdate2 $SCRIPTS_DIR
-  
+
   # Let it fail if git pull was not successful
   #echo "Attempting to pull latest code..."
   #git pull --ff-only --rebase --autostash
@@ -752,7 +750,7 @@ HEREDOC
   ./$APPLY_CONFIG_SCRIPT
 }
 
-function applyConfig1(){
+function applyConfig1() {
   #readonly K8S_PROFILES_PATH=${K8S_PROFILES_PATH_OVERRIDE:-${K8S_PROFILES_PATH:-/shared-projects/kubernetes-autodeploy/profiles}}
   #readonly K8S_DEPLOYMENT_PROFILE_BASE=${2:-${K8S_DEPLOYMENT_PROFILE_BASE_OVERRIDE:-${K8S_DEPLOYMENT_PROFILE_BASE?Missing parameter2|K8S_DEPLOYMENT_PROFILE_BASE_OVERRIDE|K8S_DEPLOYMENT_PROFILE_BASE - kubernetes deployment #profile. Should be one under https://gitlab.com/namek-base/all/kubernetes/kubernetes-autodeploy-profiles/}}}
   #readonly SCRIPTS_DIR=${3:-${K8S_PROFILES_PATH}/${K8S_DEPLOYMENT_PROFILE_BASE}.profile}
@@ -768,20 +766,20 @@ function applyConfig1(){
 
   gitUpdate2 $SCRIPTS_DIR
   (
-  cd $CONFIGS_DIR
-  # Let it fail if git pull was not successful
-  #echo "Attempting to pull latest code in [$CONFIGS_DIR] ..."
-  #git pull --ff-only --rebase --autostash
+    cd $CONFIGS_DIR
+    # Let it fail if git pull was not successful
+    #echo "Attempting to pull latest code in [$CONFIGS_DIR] ..."
+    #git pull --ff-only --rebase --autostash
 
-  echo "Listing current directory files:"
-  ls -alh
+    echo "Listing current directory files:"
+    ls -alh
   )
 
   #bin references ../../../generic-kubernetes.sh
   $buildPath-kubernetes-autodeploy/generic-ansible2.sh $CONFIGS_DIR
 }
 
-function applyConfig2(){
+function applyConfig2() {
   readonly CONFIGS_DIR=${1?Mising yml configs dir cloned from https://gitlab.com/namek/namek-kube-profiles/ }
 
   gitUpdate $buildPath-kubernetes-autodeploy/ https://gitlab.com/namek/namek-kube-autodeploy.git
@@ -794,13 +792,12 @@ function applyConfig2(){
   $buildPath-kubernetes-autodeploy/generic-ansible2.sh $CONFIGS_DIR
 }
 
-function mavenAndDockerBuildTagPush(){
+function mavenAndDockerBuildTagPush() {
   dockerBuildTagPush executeMaven
 }
 
-function usageCommand()
-{
-  cat << HEREDOC
+function usageCommand() {
+  cat <<HEREDOC
   
   Called: '$progname $allArgs'
 
@@ -845,7 +842,7 @@ function usageCommand()
 HEREDOC
 }
 
-function dockerDeployNotify(){
+function dockerDeployNotify() {
   logAndExecute curl -X POST https://chat.namek.com/hooks/Zyuz3Bpwa98PpoSxF/NzwLWXDHfAzfxea9CXhCbytzm6odTEmEq4ABvgoiPj74E2pb \
     -H 'Content-Type: application/json' \
     --data @- <<EOF
@@ -865,7 +862,6 @@ EOF
   echo "$ident $returnValue"
 }
 
-
 # Join arguments with delimiter
 # @Params
 # $1: The delimiter string
@@ -876,12 +872,11 @@ function array::joinArgs() {
   (($#)) || return 1 # At least delimiter required
   local -- delim="$1" str IFS=
   shift
-  str="${*/#/$delim}" # Expand arguments with prefixed delimiter (Empty IFS)
+  str="${*/#/$delim}"       # Expand arguments with prefixed delimiter (Empty IFS)
   printf "${str:${#delim}}" # Echo without first delimiter
 }
 
-
-function array::join(){
+function array::join() {
   local delim="$1"
   #echo eval echo "\${$2[@]}"
   #local ids=${!\${$2[@]}}
@@ -890,7 +885,7 @@ function array::join(){
   #str="${ids/#/$delim}" # Expand arguments with prefixed delimiter (Empty IFS)
   #printf "${str:${#delim}}" # Echo without first delimiter
   printf ${ids[0]}
-  if (( ${#ids[@]} > 1 )); then
+  if ((${#ids[@]} > 1)); then
     printf "$delim%s" ${ids[@]:1}
   fi
   #ids_d=${ids_d:${#delim}} # Echo without first delimiter
@@ -901,12 +896,12 @@ function array::join(){
   #echo $lst
 }
 
-function array::print(){
+function array::print() {
   #printf "\n===%s" ${commands[@]}
   array::join "," $1
 }
 
-function releaseGreenAsBlue(){
+function releaseGreenAsBlue() {
   echo "${ident} releaseGreenAsBlue"
   local -r srcName=$1
   local -r dstName=$2
@@ -915,32 +910,32 @@ function releaseGreenAsBlue(){
 
   local -r srcFile=target/build-gitops/$srcName
   local -r dstFile=target/build-gitops/$dstName
-  local -r srcVersion=`execute cat $srcFile|grep registry.gitlab.com/namek/all|sed -r "s/^[^:]*:[^:]*:([^ ]*)( .*)?$/\1/"`
-  local -r dstVersion=`execute cat $dstFile|grep registry.gitlab.com/namek/all|sed -r "s/^[^:]*:[^:]*:([^ ]*)( .*)?$/\1/"`
+  local -r srcVersion=$(execute cat $srcFile | grep registry.gitlab.com/namek/all | sed -r "s/^[^:]*:[^:]*:([^ ]*)( .*)?$/\1/")
+  local -r dstVersion=$(execute cat $dstFile | grep registry.gitlab.com/namek/all | sed -r "s/^[^:]*:[^:]*:([^ ]*)( .*)?$/\1/")
   echo "$ident Found version [$srcVersion] in $srcFile"
   echo "$ident Found version [$dstVersion] in $dstFile"
   #some changes might still be local
   #if [[ "${srcVersion}" != "${dstVersion}" ]]; then
-    echo "$ident Upgrade to [$srcVersion] found in $srcFile"
-    sed -i "s|$dstVersion|$srcVersion|g" $dstFile
-    (
-      cd $gitopsDir
-      echo "git commit -am \"Upgrade to [$srcVersion] found in $srcFile. Old version [$dstVersion]\""
-      git commit -am "Upgrade to [$srcVersion] found in $srcFile. Old version [$dstVersion]" || echo "$ident Nothing to commit"
-      git push
-    )
+  echo "$ident Upgrade to [$srcVersion] found in $srcFile"
+  sed -i "s|$dstVersion|$srcVersion|g" $dstFile
+  (
+    cd $gitopsDir
+    echo "git commit -am \"Upgrade to [$srcVersion] found in $srcFile. Old version [$dstVersion]\""
+    git commit -am "Upgrade to [$srcVersion] found in $srcFile. Old version [$dstVersion]" || echo "$ident Nothing to commit"
+    git push
+  )
   #else
   #  echo "$ident No Change"
   #fi
 }
-function releaseGreenAsBlueBackend(){
+function releaseGreenAsBlueBackend() {
   call releaseGreenAsBlue env-blue/project1/statefulset.project1-blue-backend.yaml env-green/project1/statefulset.project1-backend.yaml
   call dockerDeployNotify
 }
-function releaseGreenAsBlueOfficeApp(){
+function releaseGreenAsBlueOfficeApp() {
   releaseGreenAsBlue env-blue/project1/deployment.project1-blue-office-app.yaml env-green/project1/deployment.project1-office-app.yaml
 }
-function releaseGreenAsBlueUserApp(){
+function releaseGreenAsBlueUserApp() {
   releaseGreenAsBlue env-blue/project1/deployment.project1-blue-user-app.yaml env-green/project1/deployment.project1-user-app.yaml
 }
 
@@ -948,9 +943,7 @@ function releaseGreenAsBlueUserApp(){
 #complete -W 'dockerBuildTagPush dockerBuildTagPush mvnTest sonarScan dockerDeploy k8sScale postgresBackup postgresRestore applyConfig applyConfig2 dockerDeployNotify'  build.sh
 #complete
 
-
-
-cat << HEREDOC
+cat <<HEREDOC
 Overview
 -----------
 Script to
@@ -962,8 +955,8 @@ Script to
 Context
 -----------
 Called: '$progname $allArgs'
-HOSTNAME: `hostname`
-PWD: `pwd`
+HOSTNAME: $(hostname)
+PWD: $(pwd)
 LS:
 $(ls -al)
 -----------
@@ -972,12 +965,13 @@ Reading configured environment variables from './config.sh'
 
 HEREDOC
 
-# shellcheck source=/dev/null
-source config.sh
-
+if test -f "config.sh"; then
+  # shellcheck source=/dev/null
+  source config.sh
+fi
 
 #simple escape - https://stackoverflow.com/questions/255898/how-to-iterate-over-arguments-in-a-bash-script
-function escape(){
+function escape() {
   echo $1
 }
 
@@ -987,30 +981,30 @@ declare -a flags
 #this is how you preconfigure defaults
 #declare -a flags=("--verbose")
 
-for arg in $allArgs
-do
+for arg in $allArgs; do
   #echo "analyzing $arg"
-    case "$arg" in
-    -*)     all+=("$(escape \"$arg\")")
-            flags+=("$(escape \"$arg\")")
-            ;;
-    *)      all+=("$(escape \"$arg\")")
-            commands+=("$(escape \"$arg\")")
-            ;;
-    esac
+  case "$arg" in
+  -*)
+    all+=("$(escape \"$arg\")")
+    flags+=("$(escape \"$arg\")")
+    ;;
+  *)
+    all+=("$(escape \"$arg\")")
+    commands+=("$(escape \"$arg\")")
+    ;;
+  esac
 done
 command=${commands[0]}
 rest=("${commands[@]:1}" "${flags[@]}")
 
-cat << HEREDOC
+cat <<HEREDOC
 Samples:
   SONAR_LOGIN_TOKEN=none gitUpdateDisabled=false dryRun=true ./build.sh sonarScan
 -------
 HEREDOC
 
-
 if [[ ${debug:-n} == "y" ]]; then
-cat << HEREDOC
+  cat <<HEREDOC
 Debug Command
 -------
 all=${all[@]}
@@ -1022,7 +1016,6 @@ rest=${rest[@]}
 -------
 HEREDOC
 fi
-
 
 #while [ "$#" -gt 0 ]; do
 #  case "$1" in
@@ -1047,7 +1040,7 @@ fi
 #  esac
 #done
 
-readonly execute=`tern $dryRun "n" "y"`
+readonly execute=$(tern $dryRun "n" "y")
 readonly mainCommands=(
   dockerBuildTagPush
   'dockerBuildTagPush executeMaven'
@@ -1074,16 +1067,16 @@ readonly mainProperties=(
 )
 #array::print commands
 
-function command(){
+function command() {
   readonly commandHere=${1?"
 $ident Syntax: $progname <command|customCommand>
 $ident
 $ident <command> is:
-$ident   - `array::join \"\n$ident   - \" mainCommands`
+$ident   - $(array::join \"\n$ident - \" mainCommands)
 $ident <customCommand> is:
-$ident   - `array::join \"\n$ident   - \" customCommands`
+$ident   - $(array::join \"\n$ident - \" customCommands)
 $ident <properties> are:
-$ident   - `array::join \"\n$ident   - \" mainProperties`
+$ident   - $(array::join \"\n$ident - \" mainProperties)
 "}
   call $command ${rest[@]}
 }
