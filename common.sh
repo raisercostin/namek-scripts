@@ -16,11 +16,11 @@ readonly allArgs=$@
 set -o errexit -o pipefail -o noclobber -o nounset
 #set -o nounset [[ "${DEBUG?:-}" == 'true' ]] && set -o xtrace
 
-red=$(tput setaf 1)
+red=$(echo -e '\x1b[31m\x0a')
+green=$(echo -e '\x1b[32m\x0a')
+reset=$(echo -e '\x1b[0;10m\x0a')
 readonly red
-green=$(tput setaf 2)
 readonly green
-reset=$(tput sgr0)
 readonly reset
 readonly identPrefix="   >"
 
