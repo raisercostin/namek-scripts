@@ -1,4 +1,5 @@
 #!/bin/bash
+set -o errexit -o pipefail -o noclobber -o nounset -o posix
 
 #TODO
 # - if someone wants to override env variables defined in config he could define something like K8S_PROFILES_PATH_OVERRIDE. Search it here.
@@ -53,8 +54,9 @@ function idented() { printf "$1"'%.s' $(eval "echo {1.."$(($2))"}"); }
 declare ident=""
 function call() {
   ident="$ident$identPrefix"
-  echo "$ident start $@"
-  $@
+  echo "$ident start $*"
+  command -v "$1" 1>/dev/null || die "Invalid command $1."
+  "$@"
   echo "$ident done $1"
   ident=${ident::-${#identPrefix}}
 }
@@ -796,7 +798,149 @@ function mavenAndDockerBuildTagPush() {
   dockerBuildTagPush executeMaven
 }
 
-function usageCommand() {
+function dockerDeployNotify() {
+  logAndExecute curl -X POST https://chat.namek.com/hooks/Zyuz3Bpwa98PpoSxF/NzwLWXDHfAzfxea9CXhCbytzm6odTEmEq4ABvgoiPj74E2pb \
+    -H 'Content-Type: application/json' \
+    --data @- <<EOF
+{
+  "alias":"GoCD deployment",
+  "avatar":"https://hub.kubeapps.com/api/chartsvc/v1/assets/gocd/gocd/logo",
+  "text":"Green-backend will be deployed",
+  "attachments":[{
+    "title":"",
+    "title_link":"",
+    "text":"",
+    "image_url":"",
+    "color":""
+  }]
+}
+EOF
+  echo "$ident $returnValue"
+}
+
+# Join arguments with delimiter
+# @Params
+# $1: The delimiter string
+# ${@:2}: The arguments to join
+# @Output
+# >&1: The arguments separated by the delimiter string
+function array_joinArgs() {
+  (($#)) || return 1 # At least delimiter required
+  local -- delim="$1" str IFS=
+  shift
+  str="${*/#/$delim}"       # Expand arguments with prefixed delimiter (Empty IFS)
+  printf "${str:${#delim}}" # Echo without first delimiter
+}
+
+function array_join() {
+  local delim="$1"
+  #echo eval echo "\${$2[@]}"
+  #local ids=${!\${$2[@]}}
+  #local ids=${!2[@]}
+  eval local ids=\(\${$2[@]}\)
+  #str="${ids/#/$delim}" # Expand arguments with prefixed delimiter (Empty IFS)
+  #printf "${str:${#delim}}" # Echo without first delimiter
+  printf ${ids[0]}
+  if ((${#ids[@]} > 1)); then
+    printf "$delim%s" ${ids[@]:1}
+  fi
+  #ids_d=${ids_d:${#delim}} # Echo without first delimiter
+  #printf $ids_d
+  #eval local ids=\(\${$2[@]}\)
+  ##echo ids=${ids[@]}
+  #IFS=$1 eval 'lst="${ids[*]}"'
+  #echo $lst
+}
+
+function array_print() {
+  #printf "\n===%s" ${commands[@]}
+  array_join "," "$1"
+}
+
+function releaseGreenAsBlue() {
+  echo "${ident} releaseGreenAsBlue"
+  local -r srcName=$1
+  local -r dstName=$2
+  local -r gitopsDir=target/build-gitops
+  gitUpdate $gitopsDir/ https://${credentials}github.com/raisercostin/namek-gitops.git
+
+  local -r srcFile=target/build-gitops/$srcName
+  local -r dstFile=target/build-gitops/$dstName
+  local -r srcVersion=$(execute cat $srcFile | grep registry.gitlab.com/namek/all | sed -r "s/^[^:]*:[^:]*:([^ ]*)( .*)?$/\1/")
+  local -r dstVersion=$(execute cat $dstFile | grep registry.gitlab.com/namek/all | sed -r "s/^[^:]*:[^:]*:([^ ]*)( .*)?$/\1/")
+  echo "$ident Found version [$srcVersion] in $srcFile"
+  echo "$ident Found version [$dstVersion] in $dstFile"
+  #some changes might still be local
+  #if [[ "${srcVersion}" != "${dstVersion}" ]]; then
+  echo "$ident Upgrade to [$srcVersion] found in $srcFile"
+  sed -i "s|$dstVersion|$srcVersion|g" $dstFile
+  (
+    cd $gitopsDir
+    echo "git commit -am \"Upgrade to [$srcVersion] found in $srcFile. Old version [$dstVersion]\""
+    git commit -am "Upgrade to [$srcVersion] found in $srcFile. Old version [$dstVersion]" || echo "$ident Nothing to commit"
+    git push
+  )
+  #else
+  #  echo "$ident No Change"
+  #fi
+}
+function releaseGreenAsBlueBackend() {
+  call releaseGreenAsBlue env-blue/project1/statefulset.project1-blue-backend.yaml env-green/project1/statefulset.project1-backend.yaml
+  call dockerDeployNotify
+}
+function releaseGreenAsBlueOfficeApp() {
+  releaseGreenAsBlue env-blue/project1/deployment.project1-blue-office-app.yaml env-green/project1/deployment.project1-office-app.yaml
+}
+function releaseGreenAsBlueUserApp() {
+  releaseGreenAsBlue env-blue/project1/deployment.project1-blue-user-app.yaml env-green/project1/deployment.project1-user-app.yaml
+}
+
+#Trying to configure autocomplete for build.sh
+#complete -W 'dockerBuildTagPush dockerBuildTagPush mvnTest sonarScan dockerDeploy k8sScale postgresBackup postgresRestore applyConfig applyConfig2 dockerDeployNotify'  build.sh
+#complete
+function printContext() {
+  cat <<HEREDOC
+Overview
+-----------
+Script to
+- Build a docker image
+- Push it to a registry
+- Deploy to kubernetes via ansible
+- Perform postgres export & import
+
+Context
+-----------
+Called: '$progname $allArgs'
+HOSTNAME: $(hostname)
+PWD: $(pwd)
+LS:
+$(ls -al)
+-----------
+HEREDOC
+}
+
+function readConfiguredVariables() {
+  if test -f "config.sh"; then
+    echo "Reading configured environment variables from './config.sh'"
+    # shellcheck source=/dev/null
+    source config.sh
+  fi
+}
+
+#simple escape - https://stackoverflow.com/questions/255898/how-to-iterate-over-arguments-in-a-bash-script
+function escape() {
+  echo $1
+}
+
+function printSamples() {
+  cat <<HEREDOC
+Samples:
+  SONAR_LOGIN_TOKEN=none gitUpdateDisabled=false dryRun=true ./build.sh sonarScan
+-------
+HEREDOC
+}
+
+function usageCommand2() {
   cat <<HEREDOC
   
   Called: '$progname $allArgs'
@@ -842,141 +986,47 @@ function usageCommand() {
 HEREDOC
 }
 
-function dockerDeployNotify() {
-  logAndExecute curl -X POST https://chat.namek.com/hooks/Zyuz3Bpwa98PpoSxF/NzwLWXDHfAzfxea9CXhCbytzm6odTEmEq4ABvgoiPj74E2pb \
-    -H 'Content-Type: application/json' \
-    --data @- <<EOF
-{
-  "alias":"GoCD deployment",
-  "avatar":"https://hub.kubeapps.com/api/chartsvc/v1/assets/gocd/gocd/logo",
-  "text":"Green-backend will be deployed",
-  "attachments":[{
-    "title":"",
-    "title_link":"",
-    "text":"",
-    "image_url":"",
-    "color":""
-  }]
-}
-EOF
-  echo "$ident $returnValue"
+function usageCommand() {
+  declare -l ident=""
+  declare -l delim="\n$ident - "
+  cat <<HEREDOC1
+$ident Syntax: $progname <command|customCommand>
+$ident
+$ident <command> is:
+$ident - $(array_join "$delim" mainCommands)
+$ident <customCommand> is:
+$ident - $(array_join "$delim" customCommands)
+$ident <flags> are:
+$ident - $(array_join "$delim" mainProperties)
+
+HEREDOC1
 }
 
-# Join arguments with delimiter
-# @Params
-# $1: The delimiter string
-# ${@:2}: The arguments to join
-# @Output
-# >&1: The arguments separated by the delimiter string
-function array::joinArgs() {
-  (($#)) || return 1 # At least delimiter required
-  local -- delim="$1" str IFS=
-  shift
-  str="${*/#/$delim}"       # Expand arguments with prefixed delimiter (Empty IFS)
-  printf "${str:${#delim}}" # Echo without first delimiter
+function runMain() {
+  readonly commandHere=${1?$(usageCommand)}
+  call $command ${rest[@]}
 }
 
-function array::join() {
-  local delim="$1"
-  #echo eval echo "\${$2[@]}"
-  #local ids=${!\${$2[@]}}
-  #local ids=${!2[@]}
-  eval local ids=\(\${$2[@]}\)
-  #str="${ids/#/$delim}" # Expand arguments with prefixed delimiter (Empty IFS)
-  #printf "${str:${#delim}}" # Echo without first delimiter
-  printf ${ids[0]}
-  if ((${#ids[@]} > 1)); then
-    printf "$delim%s" ${ids[@]:1}
-  fi
-  #ids_d=${ids_d:${#delim}} # Echo without first delimiter
-  #printf $ids_d
-  #eval local ids=\(\${$2[@]}\)
-  ##echo ids=${ids[@]}
-  #IFS=$1 eval 'lst="${ids[*]}"'
-  #echo $lst
-}
+readConfiguredVariables
+#printSamples
+#printContext
 
-function array::print() {
-  #printf "\n===%s" ${commands[@]}
-  array::join "," $1
-}
-
-function releaseGreenAsBlue() {
-  echo "${ident} releaseGreenAsBlue"
-  local -r srcName=$1
-  local -r dstName=$2
-  local -r gitopsDir=target/build-gitops
-  gitUpdate $gitopsDir/ https://${credentials}github.com/raisercostin/namek-gitops.git
-
-  local -r srcFile=target/build-gitops/$srcName
-  local -r dstFile=target/build-gitops/$dstName
-  local -r srcVersion=$(execute cat $srcFile | grep registry.gitlab.com/namek/all | sed -r "s/^[^:]*:[^:]*:([^ ]*)( .*)?$/\1/")
-  local -r dstVersion=$(execute cat $dstFile | grep registry.gitlab.com/namek/all | sed -r "s/^[^:]*:[^:]*:([^ ]*)( .*)?$/\1/")
-  echo "$ident Found version [$srcVersion] in $srcFile"
-  echo "$ident Found version [$dstVersion] in $dstFile"
-  #some changes might still be local
-  #if [[ "${srcVersion}" != "${dstVersion}" ]]; then
-  echo "$ident Upgrade to [$srcVersion] found in $srcFile"
-  sed -i "s|$dstVersion|$srcVersion|g" $dstFile
-  (
-    cd $gitopsDir
-    echo "git commit -am \"Upgrade to [$srcVersion] found in $srcFile. Old version [$dstVersion]\""
-    git commit -am "Upgrade to [$srcVersion] found in $srcFile. Old version [$dstVersion]" || echo "$ident Nothing to commit"
-    git push
-  )
-  #else
-  #  echo "$ident No Change"
-  #fi
-}
-function releaseGreenAsBlueBackend() {
-  call releaseGreenAsBlue env-blue/project1/statefulset.project1-blue-backend.yaml env-green/project1/statefulset.project1-backend.yaml
-  call dockerDeployNotify
-}
-function releaseGreenAsBlueOfficeApp() {
-  releaseGreenAsBlue env-blue/project1/deployment.project1-blue-office-app.yaml env-green/project1/deployment.project1-office-app.yaml
-}
-function releaseGreenAsBlueUserApp() {
-  releaseGreenAsBlue env-blue/project1/deployment.project1-blue-user-app.yaml env-green/project1/deployment.project1-user-app.yaml
-}
-
-#Trying to configure autocomplete for build.sh
-#complete -W 'dockerBuildTagPush dockerBuildTagPush mvnTest sonarScan dockerDeploy k8sScale postgresBackup postgresRestore applyConfig applyConfig2 dockerDeployNotify'  build.sh
-#complete
-
-cat <<HEREDOC
-Overview
------------
-Script to
-- Build a docker image
-- Push it to a registry
-- Deploy to kubernetes via ansible
-- Perform postgres export & import
-
-Context
------------
-Called: '$progname $allArgs'
-HOSTNAME: $(hostname)
-PWD: $(pwd)
-LS:
-$(ls -al)
------------
-
-Reading configured environment variables from './config.sh'
-
-HEREDOC
-
-if test -f "config.sh"; then
-  # shellcheck source=/dev/null
-  source config.sh
-fi
-
-#simple escape - https://stackoverflow.com/questions/255898/how-to-iterate-over-arguments-in-a-bash-script
-function escape() {
-  echo $1
-}
+verbose='false'
+aflag=''
+bflag=''
+files=''
+while getopts 'abf:v' flag; do
+  case "${flag}" in
+  a) aflag='true' ;;
+  b) bflag='true' ;;
+  f) files="${OPTARG}" ;;
+  v) verbose='true' ;;
+  *) error "Unexpected option ${flag}" ;;
+  esac
+done
 
 declare -a all
-declare -a commands
+declare -a commands=()
 declare -a flags
 #this is how you preconfigure defaults
 #declare -a flags=("--verbose")
@@ -994,14 +1044,11 @@ for arg in $allArgs; do
     ;;
   esac
 done
-command=${commands[0]}
-rest=("${commands[@]:1}" "${flags[@]}")
 
-cat <<HEREDOC
-Samples:
-  SONAR_LOGIN_TOKEN=none gitUpdateDisabled=false dryRun=true ./build.sh sonarScan
--------
-HEREDOC
+if ((${#commands[@]} > 0)); then
+  command=${commands[0]}
+  rest=("${commands[@]:1}" "${flags[@]}")
+fi
 
 if [[ ${debug:-n} == "y" ]]; then
   cat <<HEREDOC
@@ -1065,20 +1112,4 @@ readonly mainProperties=(
   'dryRun:true|false'
   'gitUpdateDisabled:true|false'
 )
-#array::print commands
-
-function command() {
-  readonly commandHere=${1?"
-$ident Syntax: $progname <command|customCommand>
-$ident
-$ident <command> is:
-$ident   - $(array::join \"\n$ident - \" mainCommands)
-$ident <customCommand> is:
-$ident   - $(array::join \"\n$ident - \" customCommands)
-$ident <properties> are:
-$ident   - $(array::join \"\n$ident - \" mainProperties)
-"}
-  call $command ${rest[@]}
-}
-
-if [ -z "${customCommands+xxx}" ]; then command $command; fi
+if [ -z "${customCommands+xxx}" ]; then runMain $command; fi
