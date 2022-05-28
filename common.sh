@@ -972,7 +972,8 @@ Reading configured environment variables from './config.sh'
 
 HEREDOC
 
-. config.sh
+# shellcheck source=/dev/null
+source config.sh
 
 
 #simple escape - https://stackoverflow.com/questions/255898/how-to-iterate-over-arguments-in-a-bash-script
@@ -986,15 +987,15 @@ declare -a flags
 #this is how you preconfigure defaults
 #declare -a flags=("--verbose")
 
-for arg in "$allArgs"
+for arg in $allArgs
 do
   #echo "analyzing $arg"
     case "$arg" in
-    -*)     all+=("`escape \"$arg\"`")
-            flags+=("`escape \"$arg\"`")
+    -*)     all+=("$(escape \"$arg\")")
+            flags+=("$(escape \"$arg\")")
             ;;
-    *)      all+=("`escape \"$arg\"`")
-            commands+=("`escape \"$arg\"`")
+    *)      all+=("$(escape \"$arg\")")
+            commands+=("$(escape \"$arg\")")
             ;;
     esac
 done
