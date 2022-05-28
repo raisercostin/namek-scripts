@@ -207,7 +207,7 @@ function gitUpdate() {
     fi
     echo "$ident${green}done${reset}"
   else
-    echo "$ident${green}disabled gitUpdate\($MY_SCRIPTS_DIR $MY_SCRIPTS_GIT\)${reset}"
+    echo "$ident${green}disabled gitUpdate($MY_SCRIPTS_DIR $MY_SCRIPTS_GIT)${reset}"
   fi
 }
 
@@ -1003,8 +1003,7 @@ Syntax: $progname <command>
 
   Main:$(array_mkstring "$delim" "$delim" "" mainCommands)
 
-<flags>:
- - $(array_mkstring "$delim" "$delim" "" mainProperties)
+<flags>:$(array_mkstring "$delim" "$delim" "" mainProperties)
 
 Samples:
   SONAR_LOGIN_TOKEN=none gitUpdateDisabled=false dryRun=true ./build.sh sonarScan
