@@ -84,7 +84,7 @@ exitFunc() {
   RET=$?
   if [[ $RET -ne 0 ]]; then
     { set +x; } 2>/dev/null
-    echo "$ident[FATAL] Command <${CURRENT_COMMAND}> failed with exit code $RET."
+    #echo "${ident}[FATAL] Command <${CURRENT_COMMAND}> failed with exit code $RET."
   fi
   finalCleanup
 }
