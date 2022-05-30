@@ -1015,7 +1015,9 @@ HEREDOC1
 function commandExists() {
   type "$1" &>/dev/null
 }
-
+function commandMain() {
+  commandRun "$command"
+}
 function commandRun() {
   local commandHere=${1?$(usageCommand)}
   if commandExists "${commandHere}"; then
@@ -1023,7 +1025,7 @@ function commandRun() {
   elif commandExists "${commandHere}Command"; then
     call "${command}Command" "${rest[@]}"
   else
-    echo "Command $command not found"
+    echo "Command $commandHere not found"
   fi
 }
 
