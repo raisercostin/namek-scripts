@@ -1086,6 +1086,55 @@ function gitSyncCommand() {
   )
 }
 
+function log() {
+  printf "%s\n" "$*"
+  printf "%s\n" "$*" >>"$LOG_FILE"
+}
+
+function nowMilis() {
+  read -r up rest </proc/uptime
+  echo "${up%.*}${up#*.}"
+}
+function nowSeconds() {
+  date +%s
+}
+# The function measure time in between calls and store the seconds in a $measureTime variable
+function measureTime() {
+  END=$(nowMilis)
+  #END=$(date +%s)
+  measureTime=$((END - START))
+  #echo "step ${1:-} +${measureTime}s"
+  #START=$(date +%s)
+  START=$(nowMilis)
+  echo start=[$START]
+}
+#https://unix.stackexchange.com/questions/27013/displaying-seconds-as-days-hours-mins-seconds
+function displaytimeFromMilis {
+  local T=$1
+  local D=$((T / 100 / 60 / 60 / 24))
+  local H=$((T / 100 / 60 / 60 % 24))
+  local M=$((T / 100 / 60 % 60))
+  local S=$((T / 100 % 60))
+  local MS=$((T % 60))
+  (($D > 0)) && printf '%d days ' $D
+  (($H > 0)) && printf '%d hours ' $H
+  (($M > 0)) && printf '%d minutes ' $M
+  (($M > 0)) && printf '%d milis ' $MS
+  (($D > 0 || $H > 0 || $M > 0 || $S > 0)) && printf 'and '
+  printf '%d milis\n' $MS
+}
+function displaytime {
+  local T=$1
+  local D=$((T / 60 / 60 / 24))
+  local H=$((T / 60 / 60 % 24))
+  local M=$((T / 60 % 60))
+  local S=$((T % 60))
+  (($D > 0)) && printf '%d days ' $D
+  (($H > 0)) && printf '%d hours ' $H
+  (($M > 0)) && printf '%d minutes ' $M
+  (($D > 0 || $H > 0 || $M > 0)) && printf 'and '
+  printf '%d seconds\n' $S
+}
 readConfiguredVariables
 #printSamples
 #printContext
