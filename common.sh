@@ -1024,6 +1024,63 @@ function commandRun() {
   fi
 }
 
+function gitSyncCommand() {
+  defaultProjects=(
+  )
+  # projects
+  # team
+  # "team-consulting/design"
+  # team-consulting
+  # .
+
+  #set -x
+  (
+    set -o xtrace -o verbose
+
+    if [ $all == "y" ]; then
+      #for i in ${!defaultProjects[@]}
+      find -name .git -prune -print0 | while read -d $'\0' gitMetaFolder; do
+        #gitFolder="$PWD/${defaultProjects[i]}"
+        (
+          gitFolder="$gitMetaFolder/.."
+          echo ""
+          git -C $gitFolder remote -v | grep "(fetch)"
+          echo "git -C $gitFolder pull --all --prune --rebase"
+          if [ $dryRun == 0 ]; then
+            git -C $gitFolder pull --all --prune --rebase 2>&1 | comment && echo "#git ${green}OK${reset}" || echo "#git ${red}KO${reset}"
+          fi
+          if [ $push == "y" ]; then
+            echo "git -C $gitFolder push origin master"
+            if [ $dryRun == 0 ]; then
+              git -C $gitFolder push origin master 2>&1 | comment && echo "#git ${green}OK${reset}" || echo "#git ${red}KO${reset}"
+            fi
+          fi
+        )
+      done
+    else
+      for i in ${!defaultProjects[@]}; do
+        (
+          gitFolder="$PWD/${defaultProjects[i]}"
+          echo ""
+          git -C $gitFolder remote -v | grep "(fetch)"
+          echo "git -C $gitFolder pull --all --prune --rebase"
+          if [ $dryRun == 0 ]; then
+            git -C $gitFolder pull --all --prune --rebase 2>&1 | comment && echo "#git ${green}OK${reset}" || echo "#git ${red}KO${reset}"
+          fi
+          if [ $push == "y" ]; then
+            echo "git -C $gitFolder push origin master"
+            if [ $dryRun == 0 ]; then
+              git -C $gitFolder push origin master 2>&1 | comment && echo "#git ${green}OK${reset}" || echo "#git ${red}KO${reset}"
+            fi
+          fi
+        )
+      done
+    fi
+
+    set +x
+  )
+}
+
 readConfiguredVariables
 #printSamples
 #printContext
