@@ -1,0 +1,67 @@
+#!/bin/bash
+#Bootstrap file from https://github.com/raisercostin/namek-scripts.git
+################# SANE DEFAULTS     #################
+#args - https://stackoverflow.com/questions/192249/how-do-i-parse-command-line-arguments-in-bash
+# saner programming env: these switches turn some bugs into errors
+set -o errexit -o pipefail -o noclobber -o nounset -o posix
+export PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+#set -o nounset [[ "${DEBUG}" == 'true' ]] && set -o xtrace
+#bash -x -c "hostname;whoami;pwd;ls -al"
+#bash -x -c "hostname;whoami;pwd;"
+# shellcheck disable=SC2155
+{
+  [[ -v red ]] || readonly red=$(echo -e '\x1b[31m\x0a')
+  [[ -v green ]] || readonly green=$(echo -e '\x1b[32m\x0a')
+  [[ -v reset ]] || readonly reset=$(echo -e '\x1b[0;10m\x0a')
+  [[ -v progname ]] || readonly progname=$(basename "$0")
+}
+################# SANE DEFAULTS END #################
+
+## BOOTSTRAP START #################################################
+readonly bootstrapVersion=1
+# shellcheck disable=SC2155
+function defineCredentials() {
+  readonly credentials2=$(tern "${GIT_ACCESS_TOKEN_ONLY:-}" "x-access-token:${GIT_ACCESS_TOKEN_ONLY:-}" "${GIT_ACCESS_TOKEN:-}")
+  readonly credentials=$(tern "$credentials2" "$credentials2@" "")
+}
+
+ident=""
+function gitUpdate() {
+  local -r MY_SCRIPTS_DIR=${1?Missing dir}
+  local -r MY_SCRIPTS_GIT=${2?Missing git repository}
+  if [[ "${gitUpdateDisabled:-}" != "true" ]]; then
+    printf "$ident${green}Updating $MY_SCRIPTS_DIR (from $MY_SCRIPTS_GIT)${reset} ... "
+    if [[ -d "$MY_SCRIPTS_DIR" ]]; then
+      (
+        # shellcheck disable=SC2059
+        cd "$MY_SCRIPTS_DIR" && git remote set-url origin "$MY_SCRIPTS_GIT" &&
+          printf "$(git pull --ff-only --rebase --autostash)"
+      ) || (
+        printf "$ident${red}Could not pull in $MY_SCRIPTS_DIR ${reset}" &&
+          ls -al "$MY_SCRIPTS_DIR"
+      )
+    else
+      mkdir -p $MY_SCRIPTS_DIR/.. ||
+        echo "$ident${red}Cannot mkdir $MY_SCRIPTS_DIR${reset}"
+      (
+        cd $MY_SCRIPTS_DIR/.. &&
+          git clone "$MY_SCRIPTS_GIT" "$(basename $MY_SCRIPTS_DIR)" ||
+          echo "$ident${red}Could not clone${reset}"
+      )
+    fi
+    printf " ${green}done${reset}\n"
+  else
+    printf " ${red}disabled${green} gitUpdate $MY_SCRIPTS_DIR $MY_SCRIPTS_GIT ${reset}\n"
+  fi
+}
+function tern() {
+  case $1 in '' | false | FALSE | null | NULL | 0 | 'n') echo $3 ;; *) echo $2 ;; esac
+}
+## BOOTSTRAP END #################################################
+
+readonly buildPath=.
+defineCredentials
+gitUpdate ".scripts/commons" "https://${credentials}github.com/raisercostin/namek-scripts.git"
+
+# shellcheck source=.scripts/commons/common.sh
+source ".scripts/commons/common.sh" "$@"
