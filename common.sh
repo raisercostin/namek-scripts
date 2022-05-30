@@ -1,5 +1,6 @@
 #!/bin/bash
 set -o errexit -o pipefail -o noclobber -o nounset -o posix
+#set -o nounset [[ "${DEBUG?:-}" == 'true' ]] && set -o xtrace
 
 #TODO
 # - if someone wants to override env variables defined in config he could define something like K8S_PROFILES_PATH_OVERRIDE. Search it here.
@@ -7,19 +8,18 @@ set -o errexit -o pipefail -o noclobber -o nounset -o posix
 #args - https://stackoverflow.com/questions/192249/how-do-i-parse-command-line-arguments-in-bash
 # saner programming env: these switches turn some bugs into errors
 # initialize variables
-progname=$(basename $0)
-readonly progname
+# shellcheck disable=SC2155
+{
+  [[ -v red ]] || readonly red=$(echo -e '\x1b[31m\x0a')
+  [[ -v green ]] || readonly green=$(echo -e '\x1b[32m\x0a')
+  [[ -v reset ]] || readonly reset=$(echo -e '\x1b[0;10m\x0a')
+  [[ -v progname ]] || readonly progname=$(basename "$0")
+}
 verbose=1
 dryRun=${dryRun:-n}
 command="usage"
 #moved before set that will affect $@
 readonly allArgs=$@
-set -o errexit -o pipefail -o noclobber -o nounset
-#set -o nounset [[ "${DEBUG?:-}" == 'true' ]] && set -o xtrace
-
-readonly red=$(echo -e '\x1b[31m\x0a')
-readonly green=$(echo -e '\x1b[32m\x0a')
-readonly reset=$(echo -e '\x1b[0;10m\x0a')
 readonly identPrefix="   >"
 
 function tern() {
@@ -35,7 +35,10 @@ function execute() {
 returnValue=""
 function logAndExecute() {
   echo "$ident $(tern "$execute" "${green}start>${reset}" "${red}startDry>${reset}") ${*/eval/}"
-  if [[ $execute == "y" ]]; then returnValue=$("$@"); else returnValue=""; fi
+  if [[ $execute == "y" ]]; then
+    "$@"
+    returnValue=$?
+  else returnValue=""; fi
 }
 
 function title() {
