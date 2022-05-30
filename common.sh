@@ -17,12 +17,9 @@ readonly allArgs=$@
 set -o errexit -o pipefail -o noclobber -o nounset
 #set -o nounset [[ "${DEBUG?:-}" == 'true' ]] && set -o xtrace
 
-red=$(echo -e '\x1b[31m\x0a')
-green=$(echo -e '\x1b[32m\x0a')
-reset=$(echo -e '\x1b[0;10m\x0a')
-readonly red
-readonly green
-readonly reset
+readonly red=$(echo -e '\x1b[31m\x0a')
+readonly green=$(echo -e '\x1b[32m\x0a')
+readonly reset=$(echo -e '\x1b[0;10m\x0a')
 readonly identPrefix="   >"
 
 function tern() {
