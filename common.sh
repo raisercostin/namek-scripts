@@ -178,16 +178,16 @@ function gitUpdate() {
   if [[ "${gitUpdateDisabled:-}" != "true" ]]; then
     LEGACY_GOCD=${LEGACY_GOCD:-no}
 
-    echo "$ident${green}Updating $MY_SCRIPTS_DIR (from $MY_SCRIPTS_GIT)${reset}"
+    printf "$ident${green}Updating $MY_SCRIPTS_DIR (from $MY_SCRIPTS_GIT)${reset} ... "
     if [[ -d "$MY_SCRIPTS_DIR" ]]; then
       (
         cd "$MY_SCRIPTS_DIR"
         if [[ "$MY_SCRIPTS_GIT" != "none" ]]; then
           git remote set-url origin "$MY_SCRIPTS_GIT"
         fi
-        git pull --ff-only --rebase --autostash
+        printf "$(git pull --ff-only --rebase --autostash)"
       ) || (
-        echo "$ident${red}Could not pull in $MY_SCRIPTS_DIR ${reset}" &&
+        printf "$ident${red}Could not pull in $MY_SCRIPTS_DIR ${reset}" &&
           ls -al "$MY_SCRIPTS_DIR"
       )
     else
@@ -195,7 +195,7 @@ function gitUpdate() {
         echo "$ident${red}Cannot mkdir $MY_SCRIPTS_DIR${reset}"
       (
         cd $MY_SCRIPTS_DIR/.. &&
-          git clone "$MY_SCRIPTS_GIT" $(basename $MY_SCRIPTS_DIR) ||
+          git clone "$MY_SCRIPTS_GIT" "$(basename $MY_SCRIPTS_DIR)" ||
           echo "$ident${red}Could not clone${reset}"
       )
     fi
@@ -205,9 +205,9 @@ function gitUpdate() {
       git secret reveal -f
       for f in $(git secret list); do [[ -f $f ]] && chmod 600 $f || echo "${ident}Error. Does the file $f exist?"; done
     fi
-    echo "$ident${green}done${reset}"
+    printf " ${green}done${reset}\n"
   else
-    echo "$ident${green}disabled gitUpdate($MY_SCRIPTS_DIR $MY_SCRIPTS_GIT)${reset}"
+    printf " ${red}disabled${green} gitUpdate $MY_SCRIPTS_DIR $MY_SCRIPTS_GIT ${reset}\n"
   fi
 }
 
