@@ -20,7 +20,7 @@ verbose=1
 dryRun=${dryRun:-n}
 command="usage"
 #moved before set that will affect $@
-readonly allArgs=$@
+readonly allArgs=("$@")
 readonly identPrefix="   >"
 
 function tern() {
@@ -95,6 +95,7 @@ function dumpVariables() {
 
 function trapErrExit() {
   local retval=$?
+  local originalBashCommand=${BASH_COMMAND}
   #set +o xtrace
   #dumpVariables
   #local code="${1:-1}"
@@ -102,28 +103,31 @@ function trapErrExit() {
   #echo "args=$*"
   #echo "command=[${LAST_COMMAND:-}]"
 
-  printf "\n%s\n" "Error code [${BASH_COMMAND}] exit $retval"
   # Print out the stack trace described by $function_stack
-  if [ ${#FUNCNAME[@]} -gt 1 ]; then
+  if [[ $retval -ne 0 ]]; then
+    #if [ ${#FUNCNAME[@]} -gt 1 ]; then
+    printf "\n%s\n" "Error code '$originalBashCommand' exit $retval"
     # for ((i = ${#FUNCNAME[@]} - 1; i >= 0; i--)); do
     #   #echo "  ${BASH_SOURCE[$i + 1]:-"<?>"}:${BASH_LINENO[$i]} ${FUNCNAME[$i]}(...)"
     #   echo "  ${FUNCNAME[$i]} (${BASH_SOURCE[$i + 1]:-"<?>"}:${BASH_LINENO[$i]})"
     # done
     # echo "rev"
     local n=${#FUNCNAME[@]}
-    for ((i = 0; i < $n - 1; i++)); do
+    for ((i = 0; i < n - 1; i++)); do
       #echo " $i: ${BASH_SOURCE[$i + 1]}:${BASH_LINENO[$i]} ${FUNCNAME[$i]}(...)"
       echo "  ${FUNCNAME[$i]} (${BASH_SOURCE[$i + 1]:-"${BASH_SOURCE[$i]}"}:${BASH_LINENO[$i]})"
     done
     echo "  <${FUNCNAME[$n - 1]}> (${BASH_SOURCE[$n - 1]})"
+    #fi
+    echo "Exiting with status ${retval}"
+    exit "${retval}"
   fi
-  echo "Exiting with status ${retval}"
-  exit "${retval}"
 }
 #trap 'errexit' HUP INT QUIT TERM ERR
 #set -o errtrace
-trap 'trapErrExit "$BASH_COMMAND" "$LINENO" "$?" "trap1"' ABRT HUP INT QUIT TERM ERR EXIT
+#trap 'trapErrExit "$BASH_COMMAND" "$LINENO" "$?" "trap1"' ABRT HUP INT QUIT TERM ERR EXIT
 #trap 'fxTrapERROR "$BASH_COMMAND" "$LINENO" "$?" "???"' ERR
+trap 'trapErrExit "$BASH_COMMAND" "$LINENO" "$?" "trap1"' EXIT
 
 function trapDebug() {
   local old_=$1
@@ -1071,16 +1075,24 @@ function commandExists() {
   type "$1" &>/dev/null
 }
 function commandMain() {
-  commandRun "$command"
+  commandRun "${allArgs[@]}"
 }
 function commandRun() {
   local commandHere=${1?$(usageCommand)}
-  if commandExists "${commandHere}"; then
-    call "$command" "${rest[@]}"
-  elif commandExists "${commandHere}Command"; then
-    call "${command}Command" "${rest[@]}"
+  local commandUnlock=${2:-}
+  local lockFile=".lock-$command"
+  if [[ $commandUnlock == "unlock" ]]; then
+    LOCK_FILE="$lockFile" appUnlock
   else
-    echo "Command $commandHere not found"
+    if commandExists "${commandHere}"; then
+      LOCK_FILE="$lockFile" appLockStart
+      call "$command" "${rest[@]}"
+    elif commandExists "${commandHere}Command"; then
+      LOCK_FILE="$lockFile" appLockStart
+      call "${command}Command" "${rest[@]}"
+    else
+      echo "Command $commandHere not found"
+    fi
   fi
 }
 
@@ -1191,38 +1203,42 @@ function displaytime {
   printf '%d seconds\n' $S
 }
 
-function lockAppStart() {
-  local -r LOCK_FILE="${LOCK_FILE?"A lockfile must be given"}"
+function appLockStart() {
+  local -r lockFile="${LOCK_FILE?"A lockfile must be given"}"
+  local -r pause=15
   #local -r LOCK_FILE="${LOCK_FILE?$(here "A lockfile must be given")}"
   # Make sure no other instance of this script is running
-  if [[ -e $LOCK_FILE ]]; then
-    $ECHO "Another instance of the RSyncSnapshot script is already running."
-    $ECHO "Press Ctrl+C to cancel this script or if no other copy of RSnapshot"
-    $ECHO "is actually running delete the \"$LOCK_FILE\" file."
-    $ECHO
-    $ECHO -n "Waiting for the other instance of RSyncSnapshot to finish ..."
-    $ECHO "RSyncSnapshot: Waiting for another instance of RSyncSnapshot to finish." >>"$LOG_FILE"
-
+  if [[ -e $lockFile ]]; then
+    echo "App is already running. File [$lockFile] locked."
+    echo "    Run '$progname $command unlock' to kill and unlock."
+    echo -n "    Waiting ${pause}s for the other instance to finish ... (cancel by pressing Ctrl+C)"
+    [[ -v LOG_FILE ]] && echo "App is already running. File [$lockFile] locked." >>"$LOG_FILE"
     # Check every 15 seconds if the other instance is done
-    $SLEEP 15
-    while [[ -e $LOCK_FILE ]]; do
-      $ECHO -n "."
-      $SLEEP 15
+    sleep "$pause"
+    while [[ -e $lockFile ]]; do
+      echo -n "."
+      sleep "$pause"
     done
 
     # Make things pretty
-    $ECHO
-    $ECHO
+    echo
+    echo
   fi
   # Create the lock file
-  mkdir -p "$(dirname "${LOCK_FILE}")"
-  : >"$LOCK_FILE"
+  mkdir -p "$(dirname "${lockFile}")"
+  : >"$lockFile"
   #echo $$ >"${LOCK_FILE}"
 }
-function lockAppEnd() {
-  local -r LOCK_FILE="${LOCK_FILE:?"A lockfile must be given"}"
+function appLockEnd() {
+  local -r lockFile="${LOCK_FILE:?"A lockfile must be given"}"
   # Remove the lock file
-  $RM -f "$LOCK_FILE"
+  $RM -f "$lockFile"
+}
+function appUnlock() {
+  local appPid
+  appPid="$(cat "$lockFile" || echo "")"
+  if [[ ${appPid} != "" ]]; then kill -9 "$appPid"; fi
+  rm -rf "$lockFile"
 }
 ################################################################################
 
