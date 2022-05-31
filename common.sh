@@ -1,5 +1,6 @@
 #!/bin/bash
-set -o errexit -o pipefail -o noclobber -o nounset -o posix
+set -o errexit -o pipefail -o noclobber -o nounset -o posix -o errtrace -o functrace -o hashall
+# -o xtrace
 #set -o nounset [[ "${DEBUG?:-}" == 'true' ]] && set -o xtrace
 
 #TODO
@@ -76,10 +77,64 @@ function finalCleanup {
   fi
 }
 #trap finalCleanup EXIT
+function dumpVariables() {
+  echo "Undefined variables"
+  : ${BASHPID:-}
+  : ${BASH_COMMAND:-}
+  : ${BASH_SUBSHELL:-}
+  : ${COMP_WORDBREAKS:-}
+  : ${HISTCMD:-}
+  : ${RANDOM:-}
+  : ${SECONDS:-}
+  : ${flags:-}
+  declare -p | grep '[A-Za-z]$'
+  echo "Variables"
+  declare -p
+  echo "-----"
+}
 
-CURRENT_COMMAND="unknown command"
+function trapErrExit() {
+  local retval=$?
+  #set +o xtrace
+  #dumpVariables
+  #local code="${1:-1}"
+  #echo "Error in [${BASH_COMMAND}] exited with status $err"
+  #echo "args=$*"
+  #echo "command=[${LAST_COMMAND:-}]"
+
+  printf "\n%s\n" "Error code [${BASH_COMMAND}] exit $retval"
+  # Print out the stack trace described by $function_stack
+  if [ ${#FUNCNAME[@]} -gt 1 ]; then
+    # for ((i = ${#FUNCNAME[@]} - 1; i >= 0; i--)); do
+    #   #echo "  ${BASH_SOURCE[$i + 1]:-"<?>"}:${BASH_LINENO[$i]} ${FUNCNAME[$i]}(...)"
+    #   echo "  ${FUNCNAME[$i]} (${BASH_SOURCE[$i + 1]:-"<?>"}:${BASH_LINENO[$i]})"
+    # done
+    # echo "rev"
+    local n=${#FUNCNAME[@]}
+    for ((i = 0; i < $n - 1; i++)); do
+      #echo " $i: ${BASH_SOURCE[$i + 1]}:${BASH_LINENO[$i]} ${FUNCNAME[$i]}(...)"
+      echo "  ${FUNCNAME[$i]} (${BASH_SOURCE[$i + 1]:-"${BASH_SOURCE[$i]}"}:${BASH_LINENO[$i]})"
+    done
+    echo "  <${FUNCNAME[$n - 1]}> (${BASH_SOURCE[$n - 1]})"
+  fi
+  echo "Exiting with status ${retval}"
+  exit "${retval}"
+}
+#trap 'errexit' HUP INT QUIT TERM ERR
+#set -o errtrace
+trap 'trapErrExit "$BASH_COMMAND" "$LINENO" "$?" "trap1"' ABRT HUP INT QUIT TERM ERR EXIT
+#trap 'fxTrapERROR "$BASH_COMMAND" "$LINENO" "$?" "???"' ERR
+
+function trapDebug() {
+  local old_=$1
+  echo "executing [$BASH_COMMAND] [$?]"
+  : "$old_"
+}
+#trap 'trapDebug "$_"' DEBUG
+
+#CURRENT_COMMAND="unknown command"
 # keep track of the last executed command
-trap '{ set +x; } 2>/dev/null; LAST_COMMAND=$CURRENT_COMMAND; CURRENT_COMMAND=$BASH_COMMAND' DEBUG
+#trap '{ set +x; } 2>/dev/null; LAST_COMMAND=$CURRENT_COMMAND; CURRENT_COMMAND=$BASH_COMMAND' DEBUG
 exitFunc() {
   RET=$?
   if [[ $RET -ne 0 ]]; then
@@ -89,7 +144,7 @@ exitFunc() {
   finalCleanup
 }
 # echo an error message before exiting
-trap 'exitFunc' EXIT
+#trap 'exitFunc' EXIT
 
 function die() {
   local message=$*
@@ -1135,6 +1190,42 @@ function displaytime {
   (($D > 0 || $H > 0 || $M > 0)) && printf 'and '
   printf '%d seconds\n' $S
 }
+
+function lockAppStart() {
+  local -r LOCK_FILE="${LOCK_FILE?"A lockfile must be given"}"
+  #local -r LOCK_FILE="${LOCK_FILE?$(here "A lockfile must be given")}"
+  # Make sure no other instance of this script is running
+  if [[ -e $LOCK_FILE ]]; then
+    $ECHO "Another instance of the RSyncSnapshot script is already running."
+    $ECHO "Press Ctrl+C to cancel this script or if no other copy of RSnapshot"
+    $ECHO "is actually running delete the \"$LOCK_FILE\" file."
+    $ECHO
+    $ECHO -n "Waiting for the other instance of RSyncSnapshot to finish ..."
+    $ECHO "RSyncSnapshot: Waiting for another instance of RSyncSnapshot to finish." >>"$LOG_FILE"
+
+    # Check every 15 seconds if the other instance is done
+    $SLEEP 15
+    while [[ -e $LOCK_FILE ]]; do
+      $ECHO -n "."
+      $SLEEP 15
+    done
+
+    # Make things pretty
+    $ECHO
+    $ECHO
+  fi
+  # Create the lock file
+  mkdir -p "$(dirname "${LOCK_FILE}")"
+  : >"$LOCK_FILE"
+  #echo $$ >"${LOCK_FILE}"
+}
+function lockAppEnd() {
+  local -r LOCK_FILE="${LOCK_FILE:?"A lockfile must be given"}"
+  # Remove the lock file
+  $RM -f "$LOCK_FILE"
+}
+################################################################################
+
 readConfiguredVariables
 #printSamples
 #printContext
