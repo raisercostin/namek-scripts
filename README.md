@@ -4,7 +4,7 @@ Utility bash functions. And sane settings.
 
 ## Usage
 
-- Create your script `./myscript.sh`:
+- Create your script `./myscript`:
 
   ```bash
   #!/bin/bash
@@ -18,4 +18,4 @@ Utility bash functions. And sane settings.
   ```
 
 - Copy `samples/.bootstrap` to `./.bootstrap`
-- Execute with `./myscript.sh sample1`
+- Execute with `./myscript sample1`

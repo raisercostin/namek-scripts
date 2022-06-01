@@ -1087,9 +1087,11 @@ function commandRun() {
     if commandExists "${commandHere}"; then
       LOCK_FILE="$lockFile" appLockStart
       call "$command" "${rest[@]}"
+      LOCK_FILE="$lockFile" appLockEnd
     elif commandExists "${commandHere}Command"; then
       LOCK_FILE="$lockFile" appLockStart
       call "${command}Command" "${rest[@]}"
+      LOCK_FILE="$lockFile" appLockEnd
     else
       echo "Command $commandHere not found"
     fi
@@ -1232,7 +1234,7 @@ function appLockStart() {
 function appLockEnd() {
   local -r lockFile="${LOCK_FILE:?"A lockfile must be given"}"
   # Remove the lock file
-  $RM -f "$lockFile"
+  rm -f "$lockFile"
 }
 function appUnlock() {
   local appPid
