@@ -367,7 +367,7 @@ function configBuild() {
     docker login $DOCKER_REGISTRY -u $DOCKER_REGISTRY_USERNAME -p $DOCKER_REGISTRY_PASSWORD
     docker tag $DOCKER_IMAGE $tag2 && docker push $tag2
     docker tag $DOCKER_IMAGE $tag3 && docker push $tag3
-    
+
     Notes
     - GOCD secure environment variables are displayed as *******.
 HEREDOC
@@ -448,7 +448,7 @@ function configDeploy() {
     K8S_APP_DEPLOY_SCRIPT=$K8S_APP_DEPLOY_SCRIPT
     --- build
     K8S_SCRIPTS_GIT=$K8S_SCRIPTS_GIT
-    
+
     Notes
     - GOCD secure environment variables are displayed as *******.
 HEREDOC
@@ -1001,7 +1001,7 @@ function escape() {
 
 function usageCommand2() {
   cat <<HEREDOC
-  
+
   Called: '$progname $allArgs'
 
   Usage: $progname [command] [arguments]
@@ -1053,7 +1053,7 @@ function usageCommand() {
   declare -l delim="\n$ident - "
   cat <<HEREDOC1
 
-Called: '$progname $allArgs'
+Called: '$progname ${allArgs[@]}'
 
 Syntax: $progname <command>
 
@@ -1268,7 +1268,7 @@ declare -a flags
 #this is how you preconfigure defaults
 #declare -a flags=("--verbose")
 
-for arg in $allArgs; do
+for arg in ${allArgs[@]}; do
   #echo "analyzing $arg"
   case "$arg" in
   -*)
