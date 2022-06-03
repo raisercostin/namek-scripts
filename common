@@ -1,9 +1,19 @@
-#!/bin/bash
-set -o errexit -o pipefail -o noclobber -o nounset -o posix -o errtrace -o functrace -o hashall
+#!/bin/false This should be called from a copy of `samples/.bootstrap` not directly
+# shellcheck shell=bash
+# shellcheck disable=SC2096
+
+set -o errexit -o pipefail -o noclobber -o nounset -o errtrace -o functrace -o hashall
+#-o posix - function names allowing - and :
 # -o xtrace
 #set -o nounset [[ "${DEBUG?:-}" == 'true' ]] && set -o xtrace
-gitUpdate ".scripts/medlefsen-std" "https://${credentials}github.com/medlefsen/std.sh.git"
-STDSH_PATH=.scripts/medlefsen-std/bin/std.sh eval $(.scripts/medlefsen-std/bin/std.sh)
+STDSH_PATH="$(realpath .scripts/raisercostin-std)"
+thisLib=$(dirname "$(realpath "${BASH_SOURCE[0]}")")
+#source $thisLib/trycatch
+
+#gitUpdate ".scripts/medlefsen-std" "https://${credentials}github.com/medlefsen/std.sh.git"
+
+#gitUpdate ".scripts/raisercostin-std" "https://github.com/raisercostin/std.sh.git"
+#eval $(.scripts/raisercostin-std/bin/std.sh)
 
 #TODO
 # - if someone wants to override env variables defined in config he could define something like K8S_PROFILES_PATH_OVERRIDE. Search it here.
@@ -55,8 +65,10 @@ function idented() { printf "$1"'%.s' $(eval "echo {1.."$(($2))"}"); }
 
 #The `$ident` variable can be used to ident any echo/print under the current function that was called with `call`
 declare ident=""
+#it will be defined later
+alias stacktrace='echo stack1'
 function call() {
-  stacktrace "${BASH_COMMAND}"
+  stacktrace
   ident="$ident$identPrefix"
   echo "$ident start $*"
   command -v "$1" 1>/dev/null || die "Invalid command $1."
@@ -95,9 +107,10 @@ function dumpVariables() {
   declare -p
   echo "-----"
 }
-function stacktrace {
+function stacktraceT {
+  @args originalBashCommand
   local retval=$?
-  local originalBashCommand=$1
+  #local originalBashCommand=$1
   #if [ ${#FUNCNAME[@]} -gt 1 ]; then
   printf "\n%s\n" "Error code '$originalBashCommand' exit $retval"
   # for ((i = ${#FUNCNAME[@]} - 1; i >= 0; i--)); do
@@ -112,16 +125,12 @@ function stacktrace {
   done
   echo "  <${FUNCNAME[$n - 1]}> (${BASH_SOURCE[$n - 1]})"
 }
-alias @macro='MCMD="${BASH_COMMAND#*#\'\''}" eval '\''eval "$(eval "$MCMD")" #'\'
-function macroify() {
-  @macro args funcname
-  alias "@$funcname=@macro $funcname"
-}
-macroify stacktrace
+alias @stacktrace='stacktraceT ${BASH_COMMAND}'
 
 function trapErrExit() {
   local retval=$?
   local originalBashCommand=${BASH_COMMAND}
+  LOCK_FILE="${LOCK_FILE_ON_EXIT:-}" appLockEnd
   #set +o xtrace
   #dumpVariables
   #local code="${1:-1}"
@@ -1110,6 +1119,7 @@ function commandExists() {
 function commandMain() {
   commandRun "${allArgs[@]}"
 }
+
 function commandRun() {
   local commandHere=${1?"$(argRequired "ERROR: Command is missing")"}
   local commandUnlock=${2:-}
@@ -1242,6 +1252,7 @@ function displaytime {
 function appLockStart() {
   local -r lockFile="${LOCK_FILE?"A lockfile must be given"}"
   local -r pause=15
+  LOCK_FILE_ON_EXIT=$lockFile
   #local -r LOCK_FILE="${LOCK_FILE?$(here "A lockfile must be given")}"
   # Make sure no other instance of this script is running
   if [[ -e $lockFile ]]; then
@@ -1266,15 +1277,22 @@ function appLockStart() {
   #echo $$ >"${LOCK_FILE}"
 }
 function appLockEnd() {
-  local -r lockFile="${LOCK_FILE:?"A lockfile must be given"}"
-  # Remove the lock file
-  rm -f "$lockFile"
+  if [[ ${LOCK_FILE:-} ]]; then
+    local -r lockFile="${LOCK_FILE:?"A lockfile must be given"}"
+    # Remove the lock file
+    if [[ -f "$lockFile" ]]; then
+      echo "unlock [${LOCK_FILE:-}]"
+      rm -f "$lockFile"
+    fi
+  fi
 }
 function appUnlock() {
-  local appPid
-  appPid="$(cat "$lockFile" || echo "")"
-  if [[ ${appPid} != "" ]]; then kill -9 "$appPid"; fi
-  rm -rf "$lockFile"
+  if [[ -f "$lockFile" ]]; then
+    local appPid
+    appPid="$(cat "$lockFile" || echo "")"
+    if [[ ${appPid} != "" ]]; then kill -9 "$appPid"; fi
+    rm -rf "$lockFile"
+  fi
 }
 ################################################################################
 

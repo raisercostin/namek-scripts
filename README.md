@@ -1,7 +1,9 @@
 # namek-scripts
+
 Utility scripts for windows/linux.
 
 ## Linux utility functions
+
 Utility functions and sane settings by including `.bootstrap`.
 
 - Create your script `./myscript`:
@@ -21,6 +23,11 @@ Utility functions and sane settings by including `.bootstrap`.
 - Execute with `./myscript sample1`
 
 ## Windows scripts
+
 - `windows/network.ps1` - Disable Random Hardware Address Option in Windows 10 by adding the hardware address to registry
   - from https://community.spiceworks.com/scripts/show/4484-disable-random-hardware-address-option-in-windows-10
   - run it with admin rights `sudo powershell`
+
+## TODO
+
+- [ ] Rename gitUpdate to dependency defined as name, url, version from tag/commit
