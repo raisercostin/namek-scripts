@@ -6,6 +6,10 @@ set -o errexit -o pipefail -o noclobber -o nounset -o errtrace -o functrace -o h
 #-o posix - function names allowing - and :
 # -o xtrace
 #set -o nounset [[ "${DEBUG?:-}" == 'true' ]] && set -o xtrace
+#enable alias expansion
+shopt -s expand_aliases
+#shopt | grep alias
+
 STDSH_PATH="$(realpath .scripts/raisercostin-std)"
 thisLib=$(dirname "$(realpath "${BASH_SOURCE[0]}")")
 #source $thisLib/trycatch
@@ -61,14 +65,97 @@ $ident ----- ${1:-Title}
 HEREDOC
 }
 
+# the alias will capture the command and
+#alias stacktrace='bashCommandP=${BASH_COMMAND} bashLineNoP=${LINENO} bashFuncName=${FUNCNAME[0]} stacktraceF'
+alias stacktrace='stacktraceF'
+function stacktraceF {
+  #@args originalBashCommand
+  #local retval=$?
+  #local originalBashCommand=${bashCommandP:-}
+  #local originalBashLineNo=${bashLineNoP:-}
+  #local originalBashPlace=${bashFuncName:-}
+  printf "\n%s\n" "Stacktrace ($*)"
+  #if [ ${#FUNCNAME[@]} -gt 1 ]; then
+  #printf "\n%s\n" "Stacktrace $originalBashCommand place=$originalBashPlace:$originalBashLineNo exit=$retval args=($*)"
+  # for ((i = ${#FUNCNAME[@]} - 1; i >= 0; i--)); do
+  #   #echo "  ${BASH_SOURCE[$i + 1]:-"<?>"}:${BASH_LINENO[$i]} ${FUNCNAME[$i]}(...)"
+  #   echo "  ${FUNCNAME[$i]} (${BASH_SOURCE[$i + 1]:-"<?>"}:${BASH_LINENO[$i]})"
+  # done
+  # echo "rev"
+  local n=${#FUNCNAME[@]}
+  for ((i = 0; i < n - 1; i++)); do
+    #echo " $i: ${BASH_SOURCE[$i + 1]}:${BASH_LINENO[$i]} ${FUNCNAME[$i]}(...)"
+    echo "  ${FUNCNAME[$i]} (${BASH_SOURCE[$i + 1]:-"${BASH_SOURCE[$i]}"}:${BASH_LINENO[$i]})"
+  done
+  echo "  <${FUNCNAME[$n - 1]}> (${BASH_SOURCE[$n - 1]})"
+}
+
+function trapErrExit() {
+  local retval=$?
+  local originalBashCommand=${BASH_COMMAND}
+  LOCK_FILE="${LOCK_FILE_ON_EXIT:-}" appLockEnd
+  #set +o xtrace
+  #dumpVariables
+  #local code="${1:-1}"
+  #echo "Error in [${BASH_COMMAND}] exited with status $err"
+  #echo "args=$*"
+  #echo "command=[${LAST_COMMAND:-}]"
+
+  # Print out the stack trace described by $function_stack
+  if [[ $retval -ne 0 ]]; then
+    #if [ ${#FUNCNAME[@]} -gt 1 ]; then
+    printf "\n%s\n" "Error code '$originalBashCommand' exit $retval"
+    stacktrace "on trapErrExit"
+    # for ((i = ${#FUNCNAME[@]} - 1; i >= 0; i--)); do
+    #   #echo "  ${BASH_SOURCE[$i + 1]:-"<?>"}:${BASH_LINENO[$i]} ${FUNCNAME[$i]}(...)"
+    #   echo "  ${FUNCNAME[$i]} (${BASH_SOURCE[$i + 1]:-"<?>"}:${BASH_LINENO[$i]})"
+    # done
+    # echo "rev"
+    # local n=${#FUNCNAME[@]}
+    # for ((i = 0; i < n - 1; i++)); do
+    #   #echo " $i: ${BASH_SOURCE[$i + 1]}:${BASH_LINENO[$i]} ${FUNCNAME[$i]}(...)"
+    #   echo "  ${FUNCNAME[$i]} (${BASH_SOURCE[$i + 1]:-"${BASH_SOURCE[$i]}"}:${BASH_LINENO[$i]})"
+    # done
+    # echo "  <${FUNCNAME[$n - 1]}> (${BASH_SOURCE[$n - 1]})"
+    #fi
+    echo "Exiting with status ${retval}"
+    exit "${retval}"
+  fi
+}
+#trap 'errexit' HUP INT QUIT TERM ERR
+#set -o errtrace
+#trap 'trapErrExit "$BASH_COMMAND" "$LINENO" "$?" "trap1"' ABRT HUP INT QUIT TERM ERR EXIT
+#trap 'fxTrapERROR "$BASH_COMMAND" "$LINENO" "$?" "???"' ERR
+trap 'trapErrExit "$BASH_COMMAND" "$LINENO" "$?" "trap1"' EXIT
+
+function trapDebug() {
+  local old_=$1
+  echo "executing [$BASH_COMMAND] [$?]"
+  : "$old_"
+}
+#trap 'trapDebug "$_"' DEBUG
+
+#CURRENT_COMMAND="unknown command"
+# keep track of the last executed command
+#trap '{ set +x; } 2>/dev/null; LAST_COMMAND=$CURRENT_COMMAND; CURRENT_COMMAND=$BASH_COMMAND' DEBUG
+exitFunc() {
+  RET=$?
+  if [[ $RET -ne 0 ]]; then
+    { set +x; } 2>/dev/null
+    #echo "${ident}[FATAL] Command <${CURRENT_COMMAND}> failed with exit code $RET."
+  fi
+  finalCleanup
+}
+# echo an error message before exiting
+#trap 'exitFunc' EXIT
+
 function idented() { printf "$1"'%.s' $(eval "echo {1.."$(($2))"}"); }
 
 #The `$ident` variable can be used to ident any echo/print under the current function that was called with `call`
 declare ident=""
 #it will be defined later
-alias stacktrace='echo stack1'
 function call() {
-  stacktrace
+  #stacktrace "here1"
   ident="$ident$identPrefix"
   echo "$ident start $*"
   command -v "$1" 1>/dev/null || die "Invalid command $1."
@@ -107,83 +194,6 @@ function dumpVariables() {
   declare -p
   echo "-----"
 }
-function stacktraceT {
-  @args originalBashCommand
-  local retval=$?
-  #local originalBashCommand=$1
-  #if [ ${#FUNCNAME[@]} -gt 1 ]; then
-  printf "\n%s\n" "Error code '$originalBashCommand' exit $retval"
-  # for ((i = ${#FUNCNAME[@]} - 1; i >= 0; i--)); do
-  #   #echo "  ${BASH_SOURCE[$i + 1]:-"<?>"}:${BASH_LINENO[$i]} ${FUNCNAME[$i]}(...)"
-  #   echo "  ${FUNCNAME[$i]} (${BASH_SOURCE[$i + 1]:-"<?>"}:${BASH_LINENO[$i]})"
-  # done
-  # echo "rev"
-  local n=${#FUNCNAME[@]}
-  for ((i = 0; i < n - 1; i++)); do
-    #echo " $i: ${BASH_SOURCE[$i + 1]}:${BASH_LINENO[$i]} ${FUNCNAME[$i]}(...)"
-    echo "  ${FUNCNAME[$i]} (${BASH_SOURCE[$i + 1]:-"${BASH_SOURCE[$i]}"}:${BASH_LINENO[$i]})"
-  done
-  echo "  <${FUNCNAME[$n - 1]}> (${BASH_SOURCE[$n - 1]})"
-}
-alias @stacktrace='stacktraceT ${BASH_COMMAND}'
-
-function trapErrExit() {
-  local retval=$?
-  local originalBashCommand=${BASH_COMMAND}
-  LOCK_FILE="${LOCK_FILE_ON_EXIT:-}" appLockEnd
-  #set +o xtrace
-  #dumpVariables
-  #local code="${1:-1}"
-  #echo "Error in [${BASH_COMMAND}] exited with status $err"
-  #echo "args=$*"
-  #echo "command=[${LAST_COMMAND:-}]"
-
-  # Print out the stack trace described by $function_stack
-  if [[ $retval -ne 0 ]]; then
-    #if [ ${#FUNCNAME[@]} -gt 1 ]; then
-    printf "\n%s\n" "Error code '$originalBashCommand' exit $retval"
-    # for ((i = ${#FUNCNAME[@]} - 1; i >= 0; i--)); do
-    #   #echo "  ${BASH_SOURCE[$i + 1]:-"<?>"}:${BASH_LINENO[$i]} ${FUNCNAME[$i]}(...)"
-    #   echo "  ${FUNCNAME[$i]} (${BASH_SOURCE[$i + 1]:-"<?>"}:${BASH_LINENO[$i]})"
-    # done
-    # echo "rev"
-    local n=${#FUNCNAME[@]}
-    for ((i = 0; i < n - 1; i++)); do
-      #echo " $i: ${BASH_SOURCE[$i + 1]}:${BASH_LINENO[$i]} ${FUNCNAME[$i]}(...)"
-      echo "  ${FUNCNAME[$i]} (${BASH_SOURCE[$i + 1]:-"${BASH_SOURCE[$i]}"}:${BASH_LINENO[$i]})"
-    done
-    echo "  <${FUNCNAME[$n - 1]}> (${BASH_SOURCE[$n - 1]})"
-    #fi
-    echo "Exiting with status ${retval}"
-    exit "${retval}"
-  fi
-}
-#trap 'errexit' HUP INT QUIT TERM ERR
-#set -o errtrace
-#trap 'trapErrExit "$BASH_COMMAND" "$LINENO" "$?" "trap1"' ABRT HUP INT QUIT TERM ERR EXIT
-#trap 'fxTrapERROR "$BASH_COMMAND" "$LINENO" "$?" "???"' ERR
-trap 'trapErrExit "$BASH_COMMAND" "$LINENO" "$?" "trap1"' EXIT
-
-function trapDebug() {
-  local old_=$1
-  echo "executing [$BASH_COMMAND] [$?]"
-  : "$old_"
-}
-#trap 'trapDebug "$_"' DEBUG
-
-#CURRENT_COMMAND="unknown command"
-# keep track of the last executed command
-#trap '{ set +x; } 2>/dev/null; LAST_COMMAND=$CURRENT_COMMAND; CURRENT_COMMAND=$BASH_COMMAND' DEBUG
-exitFunc() {
-  RET=$?
-  if [[ $RET -ne 0 ]]; then
-    { set +x; } 2>/dev/null
-    #echo "${ident}[FATAL] Command <${CURRENT_COMMAND}> failed with exit code $RET."
-  fi
-  finalCleanup
-}
-# echo an error message before exiting
-#trap 'exitFunc' EXIT
 
 function die() {
   local message=$*
@@ -1281,7 +1291,7 @@ function appLockEnd() {
     local -r lockFile="${LOCK_FILE:?"A lockfile must be given"}"
     # Remove the lock file
     if [[ -f "$lockFile" ]]; then
-      echo "unlock [${LOCK_FILE:-}]"
+      #echo "unlock [${LOCK_FILE:-}]"
       rm -f "$lockFile"
     fi
   fi
