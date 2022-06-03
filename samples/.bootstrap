@@ -3,7 +3,9 @@
 ################# SANE DEFAULTS     #################
 #args - https://stackoverflow.com/questions/192249/how-do-i-parse-command-line-arguments-in-bash
 # saner programming env: these switches turn some bugs into errors
-set -o errexit -o pipefail -o noclobber -o nounset -o posix
+set -o errexit -o pipefail -o noclobber -o nounset
+
+# -o posix
 export PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 #set -o nounset [[ "${DEBUG}" == 'true' ]] && set -o xtrace
 #bash -x -c "hostname;whoami;pwd;ls -al"
