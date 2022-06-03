@@ -2,6 +2,8 @@
 set -o errexit -o pipefail -o noclobber -o nounset -o posix -o errtrace -o functrace -o hashall
 # -o xtrace
 #set -o nounset [[ "${DEBUG?:-}" == 'true' ]] && set -o xtrace
+gitUpdate ".scripts/medlefsen-std" "https://${credentials}github.com/medlefsen/std.sh.git"
+STDSH_PATH=.scripts/medlefsen-std/bin/std.sh eval $(.scripts/medlefsen-std/bin/std.sh)
 
 #TODO
 # - if someone wants to override env variables defined in config he could define something like K8S_PROFILES_PATH_OVERRIDE. Search it here.
@@ -18,7 +20,7 @@ set -o errexit -o pipefail -o noclobber -o nounset -o posix -o errtrace -o funct
 }
 verbose=1
 dryRun=${dryRun:-n}
-command="usage"
+command="help"
 #moved before set that will affect $@
 readonly allArgs=("$@")
 readonly identPrefix="   >"
@@ -54,6 +56,7 @@ function idented() { printf "$1"'%.s' $(eval "echo {1.."$(($2))"}"); }
 #The `$ident` variable can be used to ident any echo/print under the current function that was called with `call`
 declare ident=""
 function call() {
+  stacktrace "${BASH_COMMAND}"
   ident="$ident$identPrefix"
   echo "$ident start $*"
   command -v "$1" 1>/dev/null || die "Invalid command $1."
@@ -92,6 +95,29 @@ function dumpVariables() {
   declare -p
   echo "-----"
 }
+function stacktrace {
+  local retval=$?
+  local originalBashCommand=$1
+  #if [ ${#FUNCNAME[@]} -gt 1 ]; then
+  printf "\n%s\n" "Error code '$originalBashCommand' exit $retval"
+  # for ((i = ${#FUNCNAME[@]} - 1; i >= 0; i--)); do
+  #   #echo "  ${BASH_SOURCE[$i + 1]:-"<?>"}:${BASH_LINENO[$i]} ${FUNCNAME[$i]}(...)"
+  #   echo "  ${FUNCNAME[$i]} (${BASH_SOURCE[$i + 1]:-"<?>"}:${BASH_LINENO[$i]})"
+  # done
+  # echo "rev"
+  local n=${#FUNCNAME[@]}
+  for ((i = 0; i < n - 1; i++)); do
+    #echo " $i: ${BASH_SOURCE[$i + 1]}:${BASH_LINENO[$i]} ${FUNCNAME[$i]}(...)"
+    echo "  ${FUNCNAME[$i]} (${BASH_SOURCE[$i + 1]:-"${BASH_SOURCE[$i]}"}:${BASH_LINENO[$i]})"
+  done
+  echo "  <${FUNCNAME[$n - 1]}> (${BASH_SOURCE[$n - 1]})"
+}
+alias @macro='MCMD="${BASH_COMMAND#*#\'\''}" eval '\''eval "$(eval "$MCMD")" #'\'
+function macroify() {
+  @macro args funcname
+  alias "@$funcname=@macro $funcname"
+}
+macroify stacktrace
 
 function trapErrExit() {
   local retval=$?
@@ -977,7 +1003,7 @@ Script to
 
 Context
 -----------
-Called: '$progname $allArgs'
+Called: '$progname ${allArgs[@]}'
 HOSTNAME: $(hostname)
 PWD: $(pwd)
 LS:
@@ -999,7 +1025,7 @@ function escape() {
   echo "$1"
 }
 
-function usageCommand2() {
+function helpCommand2() {
   cat <<HEREDOC
 
   Called: '$progname $allArgs'
@@ -1045,30 +1071,37 @@ function usageCommand2() {
 HEREDOC
 }
 
-function usageCommand() {
+function autoHelpCommand {
+  if [[ "${autoHelp:-}" ]]; then
+    helpCommand
+  fi
+  :
+}
+function helpCommand {
   # shellcheck disable=SC2207
   declare -a detectedCommands=($(declare -F | grep -oE '([^ ]+)Command$' | sed 's/\(.*\)Command$/\1/'))
 
   declare -l ident=""
-  declare -l delim="\n$ident - "
+  declare -l delim="\n    $ident"
   cat <<HEREDOC1
 
-Called: '$progname ${allArgs[@]}'
+Called: '$progname$(array_mkstring " " " " "" allArgs)'
 
-Syntax: $progname <command>
+Usage: $progname [command] [flags]
 
-<command>:
-  Detected - functions ending with \`Command\`$(array_mkstring "$delim" "$delim" "" detectedCommands)
+  [command] $(array_mkstring "$delim" "$delim" "" detectedCommands)$(array_mkstring "$delim" "$delim" "" mainCommands)
 
-  Main:$(array_mkstring "$delim" "$delim" "" mainCommands)
-
-<flags>:$(array_mkstring "$delim" "$delim" "" mainProperties)
+  [flags]$(array_mkstring "$delim" "$delim" "" mainFlags)
 
 Samples:
   SONAR_LOGIN_TOKEN=none gitUpdateDisabled=false dryRun=true ./build.sh sonarScan
 
 HEREDOC1
   #  Custom:$(array_mkstring "$delim" "$delim" "" customCommands)
+}
+function argRequired {
+  autoHelpCommand
+  echo "$1"
 }
 
 function commandExists() {
@@ -1078,22 +1111,23 @@ function commandMain() {
   commandRun "${allArgs[@]}"
 }
 function commandRun() {
-  local commandHere=${1?$(usageCommand)}
+  local commandHere=${1?"$(argRequired "ERROR: Command is missing")"}
   local commandUnlock=${2:-}
   local lockFile=".lock-$command"
   if [[ $commandUnlock == "unlock" ]]; then
     LOCK_FILE="$lockFile" appUnlock
   else
-    if commandExists "${commandHere}"; then
-      LOCK_FILE="$lockFile" appLockStart
-      call "$command" "${rest[@]}"
-      LOCK_FILE="$lockFile" appLockEnd
-    elif commandExists "${commandHere}Command"; then
+    if commandExists "${commandHere}Command"; then
       LOCK_FILE="$lockFile" appLockStart
       call "${command}Command" "${rest[@]}"
       LOCK_FILE="$lockFile" appLockEnd
+    elif commandExists "${commandHere}"; then
+      LOCK_FILE="$lockFile" appLockStart
+      call "${command}" "${rest[@]}"
+      LOCK_FILE="$lockFile" appLockEnd
     else
-      echo "Command $commandHere not found"
+      autoHelpCommand
+      echo "ERROR: Command $commandHere not found"
     fi
   fi
 }
@@ -1268,7 +1302,7 @@ declare -a flags
 #this is how you preconfigure defaults
 #declare -a flags=("--verbose")
 
-for arg in ${allArgs[@]}; do
+for arg in "${allArgs[@]}"; do
   #echo "analyzing $arg"
   case "$arg" in
   -*)
@@ -1344,9 +1378,11 @@ readonly mainCommands=(
   releaseGreenAsBlueOfficeApp
   releaseGreenAsBluePlayerApp
 )
-readonly mainProperties=(
+readonly mainFlags=(
   'verbose:0|1'
   'dryRun:true|false'
   'gitUpdateDisabled:true|false'
+  'autoHelp:true|*false'
 )
+
 if [ -z "${bootstrapVersion+xxx}" ]; then commandRun "$command"; fi
