@@ -1,0 +1,8 @@
+#!/bin/bash
+source .bootstrap
+
+function sampleCommand() {
+  echo "$ident ${green}Sample executed.${reset}"
+}
+
+commandMain

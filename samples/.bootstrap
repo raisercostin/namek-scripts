@@ -63,5 +63,5 @@ readonly buildPath=.
 defineCredentials
 gitUpdate ".scripts/commons" "https://${credentials}github.com/raisercostin/namek-scripts.git"
 
-# shellcheck source=.scripts/commons/common.sh
-source ".scripts/commons/common.sh" "$@"
+# shellcheck source=.scripts/commons/common
+source ".scripts/commons/common" "$@"
