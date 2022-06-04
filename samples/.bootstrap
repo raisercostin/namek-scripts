@@ -31,7 +31,7 @@ ident=""
 function gitUpdate() {
   local -r MY_SCRIPTS_DIR=${1?Missing dir}
   local -r MY_SCRIPTS_GIT=${2?Missing git repository}
-  if [[ "${gitUpdateDisabled:-}" != "true" ]]; then
+  if [[ "${gitAutoUpdate:-}" == "true" ]]; then
     printf "$ident${green}Updating $MY_SCRIPTS_DIR (from $MY_SCRIPTS_GIT)${reset} ... "
     if [[ -d "$MY_SCRIPTS_DIR" ]]; then
       (

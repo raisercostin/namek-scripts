@@ -3,19 +3,18 @@
 # shellcheck disable=SC2096
 
 set -o errexit -o pipefail -o noclobber -o nounset -o errtrace -o functrace -o hashall
+shopt -s expand_aliases
+shopt -s extdebug
 #-o posix - function names allowing - and :
 # -o xtrace
 #set -o nounset [[ "${DEBUG?:-}" == 'true' ]] && set -o xtrace
-#enable alias expansion
-shopt -s expand_aliases
-#shopt | grep alias
 
+now=$(date '+%Y-%m-%d_%H-%M-%S_%B_w%U-%u-%a')
 STDSH_PATH="$(realpath .scripts/raisercostin-std)"
 thisLib=$(dirname "$(realpath "${BASH_SOURCE[0]}")")
+
 #source $thisLib/trycatch
-
 #gitUpdate ".scripts/medlefsen-std" "https://${credentials}github.com/medlefsen/std.sh.git"
-
 #gitUpdate ".scripts/raisercostin-std" "https://github.com/raisercostin/std.sh.git"
 #eval $(.scripts/raisercostin-std/bin/std.sh)
 
@@ -90,7 +89,7 @@ function stacktraceF {
   echo "  <${FUNCNAME[$n - 1]}> (${BASH_SOURCE[$n - 1]})"
 }
 
-function trapErrExit() {
+function trapOnExit() {
   local retval=$?
   local originalBashCommand=${BASH_COMMAND}
   LOCK_FILE="${LOCK_FILE_ON_EXIT:-}" appLockEnd
@@ -124,9 +123,9 @@ function trapErrExit() {
 }
 #trap 'errexit' HUP INT QUIT TERM ERR
 #set -o errtrace
-#trap 'trapErrExit "$BASH_COMMAND" "$LINENO" "$?" "trap1"' ABRT HUP INT QUIT TERM ERR EXIT
+#trap 'trapOnExit "$BASH_COMMAND" "$LINENO" "$?" "trap1"' ABRT HUP INT QUIT TERM ERR EXIT
 #trap 'fxTrapERROR "$BASH_COMMAND" "$LINENO" "$?" "???"' ERR
-trap 'trapErrExit "$BASH_COMMAND" "$LINENO" "$?" "trap1"' EXIT
+trap 'trapOnExit "$BASH_COMMAND" "$LINENO" "$?" "trap1" $_' EXIT
 
 function trapDebug() {
   local old_=$1
@@ -279,7 +278,7 @@ function gitUpdate2() {
 function gitUpdate() {
   local -r MY_SCRIPTS_DIR=${1?Missing dir}
   local -r MY_SCRIPTS_GIT=${2?Missing git repository}
-  if [[ "${gitUpdateDisabled:-}" != "true" ]]; then
+  if [[ "${gitAutoUpdate:-}" == "true" ]]; then
     LEGACY_GOCD=${LEGACY_GOCD:-no}
 
     printf "$ident${green}Updating $MY_SCRIPTS_DIR (from $MY_SCRIPTS_GIT)${reset} ... "
@@ -1090,7 +1089,7 @@ function helpCommand2() {
 HEREDOC
 }
 
-function autoHelpCommand {
+function autoHelp {
   if [[ "${autoHelp:-}" ]]; then
     helpCommand
   fi
@@ -1113,13 +1112,13 @@ Usage: $progname [command] [flags]
   [flags]$(array_mkstring "$delim" "$delim" "" mainFlags)
 
 Samples:
-  SONAR_LOGIN_TOKEN=none gitUpdateDisabled=false dryRun=true ./build.sh sonarScan
+  SONAR_LOGIN_TOKEN=none gitAutoUpdate=false dryRun=true ./build.sh sonarScan
 
 HEREDOC1
   #  Custom:$(array_mkstring "$delim" "$delim" "" customCommands)
 }
 function argRequired {
-  autoHelpCommand
+  autoHelp
   echo "$1"
 }
 
@@ -1146,7 +1145,7 @@ function commandRun() {
       call "${command}" "${rest[@]}"
       LOCK_FILE="$lockFile" appLockEnd
     else
-      autoHelpCommand
+      autoHelp
       echo "ERROR: Command $commandHere not found"
     fi
   fi
@@ -1409,8 +1408,9 @@ readonly mainCommands=(
 readonly mainFlags=(
   'verbose:0|1'
   'dryRun:true|false'
-  'gitUpdateDisabled:true|false'
+  'gitAutoUpdate:*true|false'
   'autoHelp:true|*false'
 )
+gitAutoUpdate=${gitAutoUpdate:-"false"}
 
 if [ -z "${bootstrapVersion+xxx}" ]; then commandRun "$command"; fi
